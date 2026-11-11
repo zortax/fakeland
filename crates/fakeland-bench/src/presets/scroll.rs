@@ -160,7 +160,7 @@ impl Spec for ScrollPreset {
                 content_factor: p.content_factor,
                 ..ScrollSmoothness::default()
             })
-            .analyze(FramePacing::default())
+            .analyze(FramePacing::default().during_scroll(vision_axis(p.axis)))
             .analyze(InputCoalescing);
         Ok(p.common.apply(bench, DEFAULTS, true))
     }

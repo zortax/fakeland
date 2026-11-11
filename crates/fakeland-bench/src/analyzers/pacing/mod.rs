@@ -17,4 +17,4 @@ pub use mode::PresentMode;
 pub use report::{
     CadenceReport, CommitTimingReport, FpsBucket, FramePacingReport, JankFrame, JankReport,
 };
-pub use samples::{PacingFrame, PacingSamples};
+pub use samples::{CommitWindow, PacingFrame, PacingSamples};

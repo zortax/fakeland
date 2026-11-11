@@ -117,3 +117,49 @@ fn empty_trace_gives_an_empty_report() {
     assert_eq!(r.mode, PresentMode::Unknown);
     assert_eq!(r.samples(), Some(0));
 }
+
+/// Builds a client that scrolls for frames 5 to 20 at every refresh, then commits one more frame
+/// ten refreshes later, as an answer to the end of the scroll.
+fn scroll_then_late_frame() -> Synth {
+    use fakeland_trace::InputKind;
+    let mut s = Synth::new();
+    for seq in 1..=20 {
+        let commit_t = s.vblank(seq - 1) + Nanos::from_millis(7);
+        if seq >= 5 {
+            s.input(
+                commit_t - Nanos::from_millis(2),
+                InputKind::PointerAxis,
+                Some((80.0, 100.0)),
+                "finger dx=0 dy=10",
+            );
+        }
+        s.frame(commit_t, seq);
+    }
+    let stop = s.vblank(25);
+    s.input(
+        stop,
+        InputKind::PointerAxis,
+        Some((80.0, 100.0)),
+        "finger dx=0 dy=0",
+    );
+    s.frame(s.vblank(29) + Nanos::from_millis(7), 30);
+    s.vblanks(1..=30, Nanos::from_micros(50));
+    s
+}
+
+#[test]
+fn scroll_window_leaves_out_frames_outside_the_scroll() {
+    let input = scroll_then_late_frame().analysis();
+    let whole = FramePacing::default().analyze(&input);
+    assert_eq!(whole.presented, 21);
+    assert_eq!(whole.missed_vblanks, 9);
+
+    let r = FramePacing::default()
+        .during_scroll(fakeland_vision::Axis::Vertical)
+        .analyze(&input);
+    assert_eq!(r.presented, 16);
+    assert_eq!(r.commits, 16);
+    assert_eq!(r.missed_vblanks, 0);
+    assert_eq!(r.jank.count, 0);
+    assert!((r.fps.unwrap() - 60.0).abs() < 0.01, "{:?}", r.fps);
+}

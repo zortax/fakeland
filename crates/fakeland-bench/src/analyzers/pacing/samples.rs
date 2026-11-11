@@ -49,23 +49,53 @@ pub struct PacingSamples {
     pub commit_span: Nanos,
 }
 
+/// The commits that pacing counts: those with a commit time from `start` to `end`, inclusive.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CommitWindow {
+    /// The first commit time in the window.
+    pub start: Timestamp,
+    /// The last commit time in the window.
+    pub end: Timestamp,
+}
+
+impl CommitWindow {
+    fn contains(&self, t: Timestamp) -> bool {
+        t >= self.start && t <= self.end
+    }
+}
+
 /// The vsync flag of `wp_presentation_feedback`.
 const VSYNC: u32 = 1;
 
 impl PacingSamples {
     /// Extracts the samples of a surface, or of the main surface of the input.
     pub fn extract(input: &AnalysisInput, surface: Option<SurfaceId>) -> Self {
+        Self::extract_within(input, surface, None)
+    }
+
+    /// Extracts the samples of the commits in a window. The first presented frame in the window
+    /// has no interval, since the frame before it lies outside.
+    pub fn extract_within(
+        input: &AnalysisInput,
+        surface: Option<SurfaceId>,
+        window: Option<CommitWindow>,
+    ) -> Self {
         let Some(surface) = surface.or_else(|| input.main_surface()) else {
             return Self::default();
         };
         let tl = &input.timeline;
+        let inside = |t: Timestamp| window.is_none_or(|w| w.contains(t));
         let records: Vec<_> = tl
             .frames(surface)
             .iter()
-            .filter(|f| f.has_content())
+            .filter(|f| f.has_content() && inside(f.committed))
             .collect();
-        let presented = tl.presented_frames(surface, None::<OutputId>);
-        let frames: Vec<PacingFrame> = presented
+        let presented: Vec<_> = tl
+            .presented_frames(surface, None::<OutputId>)
+            .into_iter()
+            .filter(|p| tl.frame(p.commit).is_some_and(|f| inside(f.committed)))
+            .collect();
+        let mut frames: Vec<PacingFrame> = presented
             .iter()
             .map(|p| {
                 let f = tl.frame(p.commit);
@@ -79,6 +109,12 @@ impl PacingSamples {
                 }
             })
             .collect();
+        if window.is_some()
+            && let Some(first) = frames.first_mut()
+        {
+            first.interval = None;
+            first.vblanks_missed = None;
+        }
         let output = presented.first().map(|p| p.output);
         let span = match (frames.first(), frames.last()) {
             (Some(a), Some(b)) => b.time.since(a.time),

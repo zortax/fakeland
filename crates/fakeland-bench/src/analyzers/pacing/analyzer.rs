@@ -1,10 +1,13 @@
 //! The frame pacing analyzer.
 
 use fakeland_types::SurfaceId;
+use fakeland_vision::Axis;
 
 use super::build::build;
+use super::samples::CommitWindow;
 use super::{FramePacingReport, PacingSamples};
 use crate::analyzer::Analyzer;
+use crate::analyzers::scroll::scroll_inputs;
 use crate::input::AnalysisInput;
 
 /// Measures the frame pacing of the target's main surface.
@@ -15,6 +18,10 @@ pub struct FramePacing {
     pub jank_factor: f64,
     /// The surface to measure; `None` takes the main surface of the target.
     pub surface: Option<SurfaceId>,
+    /// Counts only the commits from the first scroll input on this axis to the last commit that
+    /// consumed one. Frames before the scroll and frames that only answer its end stay out.
+    /// `None` counts every commit.
+    pub during_scroll: Option<Axis>,
 }
 
 impl Default for FramePacing {
@@ -22,6 +29,7 @@ impl Default for FramePacing {
         Self {
             jank_factor: 1.5,
             surface: None,
+            during_scroll: None,
         }
     }
 }
@@ -31,6 +39,24 @@ impl FramePacing {
     pub fn jank_factor(mut self, factor: f64) -> Self {
         self.jank_factor = factor;
         self
+    }
+
+    /// Returns the analyzer that counts only the commits of a scroll on an axis.
+    pub fn during_scroll(mut self, axis: Axis) -> Self {
+        self.during_scroll = Some(axis);
+        self
+    }
+
+    fn samples(&self, input: &AnalysisInput) -> PacingSamples {
+        let window = self.during_scroll.and_then(|axis| {
+            let surface = self.surface.or_else(|| input.main_surface());
+            let inputs = scroll_inputs(&input.timeline, surface, axis);
+            Some(CommitWindow {
+                start: inputs.first()?.sent,
+                end: inputs.iter().filter_map(|i| i.committed).max()?,
+            })
+        });
+        PacingSamples::extract_within(input, self.surface, window)
     }
 }
 
@@ -42,11 +68,7 @@ impl Analyzer for FramePacing {
     }
 
     fn analyze(&self, input: &AnalysisInput) -> FramePacingReport {
-        build(
-            &PacingSamples::extract(input, self.surface),
-            self.jank_factor,
-            true,
-        )
+        build(&self.samples(input), self.jank_factor, true)
     }
 
     fn pool(&self, inputs: &[&AnalysisInput]) -> Option<FramePacingReport> {
@@ -55,7 +77,7 @@ impl Analyzer for FramePacing {
         }
         let mut all = PacingSamples::default();
         for input in inputs {
-            all.merge(PacingSamples::extract(input, self.surface));
+            all.merge(self.samples(input));
         }
         Some(build(&all, self.jank_factor, false))
     }
