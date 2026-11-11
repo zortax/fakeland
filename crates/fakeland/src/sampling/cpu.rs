@@ -11,6 +11,9 @@
 //! A sample uses the runtime counter, unless the tick counter exceeds it by more than its own
 //! rounding, which means that exited threads or reaped children carried time away. A process
 //! keys by pid and start time, so a reused pid starts a new process.
+//!
+//! The cumulative time of a tree starts at the time on CPU of its members at the first sample and
+//! grows by the time of each later sample, so it never falls when threads or members end.
 
 use std::collections::HashMap;
 
@@ -40,6 +43,7 @@ struct Baseline {
     uptime: u64,
     ticks: HashMap<(u32, u64), u64>,
     runtime: HashMap<(u32, u64, u32), u64>,
+    total_ns: u64,
 }
 
 impl Baseline {
@@ -58,6 +62,7 @@ impl Baseline {
                 .map(|m| ((m.pid, m.starttime), m.ticks))
                 .collect(),
             runtime,
+            total_ns: 0,
         }
     }
 }
@@ -79,9 +84,19 @@ impl CpuAccount {
         uptime: u64,
         members: &[Member],
     ) -> Option<f64> {
-        let prev = self.trees.insert(root, Baseline::of(t, uptime, members))?;
+        let Some(prev) = self.trees.insert(root, Baseline::of(t, uptime, members)) else {
+            let has_runtime = members.iter().any(|m| !m.threads.is_empty());
+            let start = if has_runtime {
+                members.iter().flat_map(|m| &m.threads).map(|t| t.1).sum()
+            } else {
+                (members.iter().map(|m| m.ticks).sum::<u64>() as f64 * TICK_NS) as u64
+            };
+            self.set_total(root, start);
+            return None;
+        };
         let span = t.since(prev.t).as_secs_f64();
         if span <= 0.0 {
+            self.set_total(root, prev.total_ns);
             return Some(0.0);
         }
         let ticks_ns = tick_delta(&prev, &self.trees[&root], members) as f64 * TICK_NS;
@@ -97,7 +112,19 @@ impl CpuAccount {
         } else {
             ticks_ns
         };
+        self.set_total(root, prev.total_ns + ns as u64);
         Some(ns / 1e9 / span * 100.0)
+    }
+
+    /// Returns the cumulative time on CPU of a tree in nanoseconds since its first sample.
+    pub fn total_ns(&self, root: u32) -> Option<u64> {
+        self.trees.get(&root).map(|b| b.total_ns)
+    }
+
+    fn set_total(&mut self, root: u32, total_ns: u64) {
+        if let Some(b) = self.trees.get_mut(&root) {
+            b.total_ns = total_ns;
+        }
     }
 
     /// Drops the baseline of a tree.
@@ -266,5 +293,34 @@ mod tests {
             )
             .unwrap();
         assert!((cpu - 51.0).abs() < 1e-9, "{cpu}");
+    }
+
+    #[test]
+    fn cumulative_time_starts_at_the_runtime_and_never_falls() {
+        let mut acc = CpuAccount::default();
+        let t0 = Timestamp(SEC);
+        assert_eq!(acc.total_ns(10), None);
+        acc.update(10, t0, 1000, &[mt(10, 5, 100, &[(10, 300 * MS), (12, 0)])]);
+        assert_eq!(acc.total_ns(10), Some(300 * MS));
+        // Thread 12 burned 500 ms and ended; the ticks carry it.
+        acc.update(
+            10,
+            t0 + fakeland_types::Nanos::from_secs(1),
+            1100,
+            &[mt(10, 5, 151, &[(10, 310 * MS)])],
+        );
+        assert_eq!(acc.total_ns(10), Some(300 * MS + 510 * MS));
+        // The main thread adds 2 ms.
+        acc.update(
+            10,
+            t0 + fakeland_types::Nanos::from_secs(2),
+            1200,
+            &[mt(10, 5, 151, &[(10, 312 * MS)])],
+        );
+        assert_eq!(acc.total_ns(10), Some(812 * MS));
+        acc.forget(10);
+        assert_eq!(acc.total_ns(10), None);
+        acc.update(20, t0, 1000, &[m(20, 5, 3)]);
+        assert_eq!(acc.total_ns(20), Some(30 * MS));
     }
 }

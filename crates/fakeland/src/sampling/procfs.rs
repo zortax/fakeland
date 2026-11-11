@@ -1,5 +1,9 @@
-//! Reads of `/proc`: the stat line of every process and the memory and thread lines of
-//! `/proc/<pid>/status`. Parsers take text, so tests feed them fixed content.
+//! Reads of `/proc`: the stat line of every process, the memory, thread and context switch lines
+//! of `/proc/<pid>/status`, and the counters of each thread. Parsers take text, so tests feed them
+//! fixed content.
+//!
+//! The context switch lines of `/proc/<pid>/status` count the main thread only. The switches of a
+//! process are the sum over the status files of its threads in `/proc/<pid>/task`.
 
 use std::fs;
 
@@ -65,31 +69,39 @@ pub struct StatusLines {
     pub rss_bytes: u64,
     /// The thread count.
     pub threads: u32,
+    /// The peak resident memory in bytes, `None` without a `VmHWM` line.
+    pub hwm_bytes: Option<u64>,
+    /// The voluntary and involuntary context switches of the task, `None` without both lines.
+    pub ctx_switches: Option<u64>,
 }
 
-/// Parses the `VmRSS` and `Threads` lines of a status file. A kernel thread or a zombie has no
-/// `VmRSS` line, which reads as zero.
+/// Parses the `VmRSS`, `VmHWM`, `Threads` and context switch lines of a status file. A kernel
+/// thread or a zombie has no `VmRSS` line, which reads as zero.
 pub fn parse_status(content: &str) -> StatusLines {
     let mut out = StatusLines::default();
+    let (mut voluntary, mut involuntary) = (None, None);
     for line in content.lines() {
         let Some((key, value)) = line.split_once(':') else {
             continue;
         };
         let value = value.trim();
         match key {
-            "VmRSS" => {
-                let kb: u64 = value
-                    .split_whitespace()
-                    .next()
-                    .and_then(|v| v.parse().ok())
-                    .unwrap_or(0);
-                out.rss_bytes = kb * 1024;
-            }
+            "VmRSS" => out.rss_bytes = parse_kb(value).unwrap_or(0),
+            "VmHWM" => out.hwm_bytes = parse_kb(value),
             "Threads" => out.threads = value.parse().unwrap_or(0),
+            "voluntary_ctxt_switches" => voluntary = value.parse::<u64>().ok(),
+            "nonvoluntary_ctxt_switches" => involuntary = value.parse::<u64>().ok(),
             _ => {}
         }
     }
+    out.ctx_switches = voluntary.zip(involuntary).map(|(v, i)| v + i);
     out
+}
+
+/// Parses a value of the form `51200 kB` into bytes.
+pub fn parse_kb(value: &str) -> Option<u64> {
+    let kb: u64 = value.split_whitespace().next()?.parse().ok()?;
+    Some(kb * 1024)
 }
 
 /// Parses `/proc/uptime` into clock ticks since boot.
@@ -108,17 +120,39 @@ pub fn parse_schedstat(content: &str) -> Option<u64> {
     content.split_whitespace().next()?.parse().ok()
 }
 
-/// Reads the time on CPU of every live thread of a process, in nanoseconds, by thread id.
-/// Returns an empty list when the kernel has no scheduler statistics.
-pub fn read_thread_runtimes(pid: u32) -> Vec<(u32, u64)> {
+/// The counters of one live thread.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ThreadCounters {
+    /// The thread id.
+    pub tid: u32,
+    /// The time on CPU in nanoseconds, `None` when the kernel has no scheduler statistics.
+    pub runtime_ns: Option<u64>,
+    /// The voluntary and involuntary context switches, `None` when unread.
+    pub switches: Option<u64>,
+}
+
+/// Reads the counters of every live thread of a process. Reads the context switches only when
+/// `switches` is true.
+pub fn read_threads(pid: u32, switches: bool) -> Vec<ThreadCounters> {
     let Ok(dir) = fs::read_dir(format!("/proc/{pid}/task")) else {
         return Vec::new();
     };
     dir.flatten()
         .filter_map(|e| {
             let tid: u32 = e.file_name().to_str()?.parse().ok()?;
-            let text = fs::read_to_string(e.path().join("schedstat")).ok()?;
-            Some((tid, parse_schedstat(&text)?))
+            let path = e.path();
+            let runtime_ns = fs::read_to_string(path.join("schedstat"))
+                .ok()
+                .and_then(|t| parse_schedstat(&t));
+            let switches = switches
+                .then(|| fs::read_to_string(path.join("status")).ok())
+                .flatten()
+                .and_then(|t| parse_status(&t).ctx_switches);
+            Some(ThreadCounters {
+                tid,
+                runtime_ns,
+                switches,
+            })
         })
         .collect()
 }
@@ -167,15 +201,21 @@ mod tests {
 
     #[test]
     fn parses_status_memory_and_threads() {
-        let text = "Name:\tvkcube\nVmPeak:\t  999 kB\nVmRSS:\t   51200 kB\nThreads:\t7\n";
+        let text = "Name:\tvkcube\nVmPeak:\t  999 kB\nVmHWM:\t   60000 kB\nVmRSS:\t   51200 kB\n\
+                    Threads:\t7\nvoluntary_ctxt_switches:\t1200\n\
+                    nonvoluntary_ctxt_switches:\t34\n";
         assert_eq!(
             parse_status(text),
             StatusLines {
                 rss_bytes: 51200 * 1024,
-                threads: 7
+                threads: 7,
+                hwm_bytes: Some(60000 * 1024),
+                ctx_switches: Some(1234),
             }
         );
         assert_eq!(parse_status("Name:\tkworker\n"), StatusLines::default());
+        let half = parse_status("voluntary_ctxt_switches:\t5\n");
+        assert_eq!(half.ctx_switches, None);
     }
 
     #[test]
@@ -200,7 +240,10 @@ mod tests {
         assert!(status.rss_bytes > 0);
         assert!(status.threads >= 1);
         assert!(read_all_stats().iter().any(|s| s.pid == me));
-        let threads = read_thread_runtimes(me);
-        assert!(threads.iter().any(|&(tid, ns)| tid == me && ns > 0));
+        let threads = read_threads(me, true);
+        let main = threads.iter().find(|t| t.tid == me).unwrap();
+        assert!(main.runtime_ns.unwrap() > 0);
+        assert!(main.switches.is_some());
+        assert!(read_threads(me, false).iter().all(|t| t.switches.is_none()));
     }
 }

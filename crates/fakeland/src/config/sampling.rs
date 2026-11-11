@@ -1,5 +1,6 @@
 //! The configuration of resource sampling: the sample interval and the sources. Process samples
-//! cover the process tree of every launched app; GPU samples cover the render device.
+//! cover the process tree of every launched app; GPU samples cover the render device and the GPU
+//! use of each tree; energy samples cover the CPU and GPU energy counters of the host.
 
 use fakeland_types::Nanos;
 use fakeland_types::dur::{Dur, as_dur};
@@ -21,6 +22,12 @@ pub struct SamplingConfig {
     pub process: bool,
     /// Sample GPU utilization and memory of the render device.
     pub gpu: bool,
+    /// Sample proportional, private and swapped memory and the peak resident set of every tree.
+    pub memory_detail: bool,
+    /// Sample GPU memory and GPU busy time of every tree.
+    pub gpu_process: bool,
+    /// Sample the energy counters of the CPU packages and the GPU.
+    pub energy: bool,
 }
 
 impl Default for SamplingConfig {
@@ -29,6 +36,9 @@ impl Default for SamplingConfig {
             interval: Nanos::from_millis(100),
             process: true,
             gpu: true,
+            memory_detail: true,
+            gpu_process: true,
+            energy: true,
         }
     }
 }
@@ -53,6 +63,24 @@ impl SamplingConfig {
         self.gpu = on;
         self
     }
+
+    /// Returns the settings with detailed memory sampling on or off.
+    pub fn memory_detail(mut self, on: bool) -> Self {
+        self.memory_detail = on;
+        self
+    }
+
+    /// Returns the settings with per-tree GPU sampling on or off.
+    pub fn gpu_process(mut self, on: bool) -> Self {
+        self.gpu_process = on;
+        self
+    }
+
+    /// Returns the settings with energy sampling on or off.
+    pub fn energy(mut self, on: bool) -> Self {
+        self.energy = on;
+        self
+    }
 }
 
 #[cfg(test)]
@@ -67,6 +95,10 @@ mod tests {
             serde_json::from_str(r#"{"interval":"250ms","gpu":false}"#).unwrap();
         assert_eq!(c.interval, Nanos::from_millis(250));
         assert!(c.process && !c.gpu);
+        assert!(c.memory_detail && c.gpu_process && c.energy);
+        let c: SamplingConfig =
+            serde_json::from_str(r#"{"memory_detail":false,"energy":false}"#).unwrap();
+        assert!(!c.memory_detail && c.gpu_process && !c.energy);
         let back: SamplingConfig =
             serde_json::from_str(&serde_json::to_string(&c).unwrap()).unwrap();
         assert_eq!(back, c);
@@ -76,8 +108,14 @@ mod tests {
     fn builders_set_fields() {
         let c = SamplingConfig::every(Nanos::from_millis(50))
             .process(false)
-            .gpu(true);
+            .gpu(true)
+            .memory_detail(false)
+            .gpu_process(false)
+            .energy(false);
         assert_eq!(c.interval, Nanos::from_millis(50));
         assert!(!c.process && c.gpu);
+        assert!(!c.memory_detail && !c.gpu_process && !c.energy);
+        let on = c.memory_detail(true).gpu_process(true).energy(true);
+        assert!(on.memory_detail && on.gpu_process && on.energy);
     }
 }

@@ -1,6 +1,7 @@
 //! Resource sampling on the compositor thread: it starts the sampler thread, tells it about
-//! launched and exited roots from the trace, records each batch as `ProcessSample` and
-//! `GpuSample` events with compositor timestamps, and keeps the latest samples.
+//! launched and exited roots from the trace, records each batch as `ProcessSample`,
+//! `ProcessDetail`, `GpuProcessSample`, `GpuSample` and `EnergySample` events with one compositor
+//! timestamp, and keeps the latest samples.
 
 use std::collections::BTreeMap;
 
@@ -9,8 +10,10 @@ use fakeland_types::{ProcessId, Timestamp};
 use smithay::reexports::calloop::RegistrationToken;
 use smithay::reexports::calloop::channel::{self, Channel};
 
+use super::collect::TreeReading;
+use super::gpu::GpuProcessReading;
 use super::sampler::{Batch, Control, SamplerThread};
-use super::{GpuReading, ProcessTreeSample, ResourceSnapshot};
+use super::{EnergyReading, GpuReading, ProcessTreeSample, ResourceSnapshot};
 use crate::config::SamplingConfig;
 use crate::render::find_render_node;
 use crate::server::State;
@@ -26,6 +29,7 @@ pub struct Sampling {
     latest: BTreeMap<u32, ProcessTreeSample>,
     gpu: Option<GpuReading>,
     gpu_source: Option<String>,
+    energy: Vec<EnergyReading>,
     time: Option<Timestamp>,
 }
 
@@ -70,6 +74,7 @@ impl State {
             latest: BTreeMap::new(),
             gpu: None,
             gpu_source: None,
+            energy: Vec::new(),
             time: None,
         });
         Ok(())
@@ -95,22 +100,28 @@ impl State {
             processes: s.latest.values().cloned().collect(),
             gpu: s.gpu,
             gpu_source: s.gpu_source.clone(),
+            energy: s.energy.clone(),
         }
     }
 
     fn on_samples(&mut self, batch: Batch) {
-        let (trees, gpu, ended) = match batch {
-            Batch::GpuSource(name) => {
-                if let Some(s) = &mut self.sampling {
-                    s.gpu_source = name.map(str::to_string);
-                }
-                return;
+        let Batch::Sample {
+            trees,
+            gpu,
+            gpu_trees,
+            energy,
+            ended,
+        } = batch
+        else {
+            if let (Batch::GpuSource(name), Some(s)) = (batch, &mut self.sampling) {
+                s.gpu_source = name.map(str::to_string);
             }
-            Batch::Sample { trees, gpu, ended } => (trees, gpu, ended),
+            return;
         };
         let now = self.now();
         let mut samples = Vec::new();
-        for tree in trees {
+        for tree in &trees {
+            self.emit_at(now, detail_event(tree));
             let Some(cpu) = tree.cpu_percent else {
                 continue;
             };
@@ -120,15 +131,8 @@ impl State {
                 .get(&tree.root)
                 .map(|a| a.command.clone())
                 .unwrap_or_default();
-            samples.push(ProcessTreeSample {
-                pid: ProcessId(tree.root),
-                command,
-                time: now,
-                cpu_percent: cpu,
-                rss_bytes: tree.rss_bytes,
-                threads: tree.threads,
-                processes: tree.processes,
-            });
+            let g = gpu_trees.iter().find(|g| g.root == tree.root);
+            samples.push(tree_sample(tree, g, command, now, cpu));
         }
         for s in &samples {
             self.emit_at(
@@ -141,6 +145,18 @@ impl State {
                 },
             );
         }
+        for g in &gpu_trees {
+            self.emit_at(
+                now,
+                Event::GpuProcessSample {
+                    pid: ProcessId(g.root),
+                    mem_bytes: g.mem_bytes,
+                    busy_ns_total: g.busy_ns_total,
+                    util_percent: g.util_percent,
+                    source: g.source.clone(),
+                },
+            );
+        }
         if let Some(g) = gpu {
             self.emit_at(
                 now,
@@ -148,6 +164,15 @@ impl State {
                     util_percent: g.util_percent,
                     mem_used_bytes: g.mem_used_bytes,
                     mem_total_bytes: g.mem_total_bytes,
+                },
+            );
+        }
+        for e in &energy {
+            self.emit_at(
+                now,
+                Event::EnergySample {
+                    domain: e.domain.clone(),
+                    microjoules_total: e.microjoules_total,
                 },
             );
         }
@@ -164,5 +189,50 @@ impl State {
         if gpu.is_some() {
             state.gpu = gpu;
         }
+        if !energy.is_empty() {
+            state.energy = energy;
+        }
+    }
+}
+
+/// Returns the detail event of a tree reading.
+fn detail_event(tree: &TreeReading) -> Event {
+    Event::ProcessDetail {
+        pid: ProcessId(tree.root),
+        cpu_ns_total: tree.cpu_ns_total,
+        ctx_switches_total: tree.ctx_switches_total,
+        pss_bytes: tree.memory.map(|m| m.pss_bytes),
+        private_bytes: tree.memory.map(|m| m.private_bytes),
+        swap_bytes: tree.memory.map(|m| m.swap_bytes),
+        hwm_bytes: tree.hwm_bytes,
+    }
+}
+
+/// Builds the snapshot entry of a tree.
+fn tree_sample(
+    tree: &TreeReading,
+    gpu: Option<&GpuProcessReading>,
+    command: String,
+    time: Timestamp,
+    cpu_percent: f64,
+) -> ProcessTreeSample {
+    ProcessTreeSample {
+        pid: ProcessId(tree.root),
+        command,
+        time,
+        cpu_percent,
+        rss_bytes: tree.rss_bytes,
+        threads: tree.threads,
+        processes: tree.processes,
+        cpu_ns_total: tree.cpu_ns_total,
+        ctx_switches_total: tree.ctx_switches_total,
+        pss_bytes: tree.memory.map(|m| m.pss_bytes),
+        private_bytes: tree.memory.map(|m| m.private_bytes),
+        swap_bytes: tree.memory.map(|m| m.swap_bytes),
+        hwm_bytes: tree.hwm_bytes,
+        gpu_mem_bytes: gpu.and_then(|g| g.mem_bytes),
+        gpu_busy_ns_total: gpu.and_then(|g| g.busy_ns_total),
+        gpu_util_percent: gpu.and_then(|g| g.util_percent),
+        gpu_source: gpu.map(|g| g.source.clone()),
     }
 }

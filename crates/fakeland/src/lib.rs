@@ -71,7 +71,7 @@ pub use recording::{Subscription, SubscriptionItem};
 pub use runner::{
     CaptureResult, RunError, RunErrorKind, RunOptions, RunResult, StepTiming, TriggerFiring,
 };
-pub use sampling::{GpuReading, ProcessTreeSample, ResourceSnapshot};
+pub use sampling::{EnergyReading, GpuReading, ProcessTreeSample, ResourceSnapshot};
 pub use server::ClientInfo;
 pub use session::{
     Fakeland, FakelandBuilder, RunHandle, Session, SessionError, StartError, WindowOp,

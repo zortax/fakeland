@@ -1,19 +1,19 @@
 //! The sampler thread. It wakes at each sample time on the session clock, reads `/proc` for the
-//! trees of the launched roots and reads the GPU probe, then hands one batch to the compositor
-//! thread, which records it. Reads never run on the compositor thread.
+//! trees of the launched roots, reads the GPU probes and the energy counters, then hands one batch
+//! to the compositor thread, which records it. Reads never run on the compositor thread.
 
-use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread::{self, JoinHandle};
 
-use fakeland_types::{Nanos, SharedClock, Timestamp};
+use fakeland_types::{Nanos, SharedClock};
 use smithay::reexports::calloop::channel::Sender;
 
-use super::cpu::{CpuAccount, Member};
-use super::gpu::{GpuReading, open_probe};
-use super::procfs::{StatLine, read_all_stats, read_status, read_thread_runtimes, read_uptime};
-use super::tree::members;
+use super::collect::{TreeReading, TreeSample, Trees};
+use super::energy::{EnergyMeter, EnergyReading};
+use super::gpu::{
+    GpuContext, GpuProcessChain, GpuProcessReading, GpuReading, TreeMembers, open_probe,
+};
 use crate::config::SamplingConfig;
 
 /// A control message to the sampler thread.
@@ -27,21 +27,6 @@ pub enum Control {
     Stop,
 }
 
-/// The reading of one tree.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct TreeReading {
-    /// The root pid.
-    pub root: u32,
-    /// CPU use in percent of one core, `None` on the first sample of the tree.
-    pub cpu_percent: Option<f64>,
-    /// Resident memory in bytes.
-    pub rss_bytes: u64,
-    /// Threads.
-    pub threads: u32,
-    /// Member processes.
-    pub processes: u32,
-}
-
 /// One sample of every source.
 #[derive(Debug, Clone)]
 pub enum Batch {
@@ -53,6 +38,10 @@ pub enum Batch {
         trees: Vec<TreeReading>,
         /// The GPU reading.
         gpu: Option<GpuReading>,
+        /// The GPU readings of the trees.
+        gpu_trees: Vec<GpuProcessReading>,
+        /// The energy counters.
+        energy: Vec<EnergyReading>,
         /// Roots whose trees ended.
         ended: Vec<u32>,
     },
@@ -98,12 +87,6 @@ impl Drop for SamplerThread {
     }
 }
 
-struct Trees {
-    roots: BTreeSet<u32>,
-    exited: BTreeSet<u32>,
-    cpu: CpuAccount,
-}
-
 fn run(
     config: SamplingConfig,
     clock: SharedClock,
@@ -111,7 +94,11 @@ fn run(
     rx: mpsc::Receiver<Control>,
     out: Sender<Batch>,
 ) {
-    let mut gpu = config.gpu.then(|| open_probe(node.as_deref())).flatten();
+    let ctx = GpuContext::open(
+        node.as_deref(),
+        config.gpu || config.gpu_process || config.energy,
+    );
+    let mut gpu = config.gpu.then(|| open_probe(&ctx)).flatten();
     if config.gpu
         && out
             .send(Batch::GpuSource(gpu.as_ref().map(|p| p.name())))
@@ -119,11 +106,15 @@ fn run(
     {
         return;
     }
-    let mut trees = Trees {
-        roots: BTreeSet::new(),
-        exited: BTreeSet::new(),
-        cpu: CpuAccount::default(),
-    };
+    let mut gpu_trees = (config.process && config.gpu_process).then(|| GpuProcessChain::open(&ctx));
+    if let Some(chain) = &gpu_trees {
+        tracing::debug!("per-tree GPU backends: {:?}", chain.names());
+    }
+    let mut energy = config.energy.then(|| EnergyMeter::open(&ctx));
+    if let Some(meter) = &energy {
+        tracing::debug!("energy domains: {:?}", meter.names());
+    }
+    let mut trees = Trees::default();
     let mut next = clock.now();
     loop {
         let wait = next.since(clock.now()).max(Nanos::ZERO);
@@ -140,16 +131,33 @@ fn run(
             Ok(Control::Stop) | Err(RecvTimeoutError::Disconnected) => return,
             Err(RecvTimeoutError::Timeout) => {}
         }
-        let (readings, ended) = if config.process && !trees.roots.is_empty() {
-            sample_trees(&mut trees, clock.now())
+        let t = clock.now();
+        let sample = if config.process && !trees.roots.is_empty() {
+            trees.sample(t, config.memory_detail)
         } else {
-            (Vec::new(), Vec::new())
+            TreeSample::default()
         };
         let gpu_reading = gpu.as_mut().and_then(|p| p.read());
+        let gpu_tree_readings = match &mut gpu_trees {
+            Some(chain) => {
+                for root in &sample.ended {
+                    chain.forget(*root);
+                }
+                let members: Vec<TreeMembers<'_>> = sample
+                    .members
+                    .iter()
+                    .map(|(root, pids)| TreeMembers { root: *root, pids })
+                    .collect();
+                chain.read(t, &members)
+            }
+            None => Vec::new(),
+        };
         let batch = Batch::Sample {
-            trees: readings,
+            trees: sample.readings,
             gpu: gpu_reading,
-            ended,
+            gpu_trees: gpu_tree_readings,
+            energy: energy.as_mut().map(EnergyMeter::read).unwrap_or_default(),
+            ended: sample.ended,
         };
         if out.send(batch).is_err() {
             return;
@@ -160,51 +168,4 @@ fn run(
             next = now + config.interval;
         }
     }
-}
-
-fn sample_trees(trees: &mut Trees, t: Timestamp) -> (Vec<TreeReading>, Vec<u32>) {
-    let stats = read_all_stats();
-    let uptime = read_uptime().unwrap_or(0);
-    let by_root = members(&stats, &trees.roots);
-    let stat_of: BTreeMap<u32, &StatLine> = stats.iter().map(|s| (s.pid, s)).collect();
-    let mut readings = Vec::new();
-    let mut ended = Vec::new();
-    for (root, pids) in by_root {
-        if pids.is_empty() {
-            if trees.exited.contains(&root) {
-                ended.push(root);
-            }
-            continue;
-        }
-        let mut list = Vec::with_capacity(pids.len());
-        let (mut rss, mut threads) = (0u64, 0u32);
-        for pid in &pids {
-            let Some(stat) = stat_of.get(pid) else {
-                continue;
-            };
-            list.push(Member {
-                pid: *pid,
-                starttime: stat.starttime,
-                ticks: stat.ticks(),
-                threads: read_thread_runtimes(*pid),
-            });
-            if let Some(status) = read_status(*pid) {
-                rss += status.rss_bytes;
-                threads += status.threads;
-            }
-        }
-        readings.push(TreeReading {
-            root,
-            cpu_percent: trees.cpu.update(root, t, uptime, &list),
-            rss_bytes: rss,
-            threads,
-            processes: list.len() as u32,
-        });
-    }
-    for root in &ended {
-        trees.roots.remove(root);
-        trees.exited.remove(root);
-        trees.cpu.forget(*root);
-    }
-    (readings, ended)
 }
