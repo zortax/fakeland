@@ -1,7 +1,8 @@
 /target
 
-# Core dumps.
-core.*
+# Core dumps in the repository root.
+/core
+/core.[0-9]*
 
 # Local design notes and feature plans.
 /planning/
