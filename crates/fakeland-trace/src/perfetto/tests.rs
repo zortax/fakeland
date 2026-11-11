@@ -137,6 +137,11 @@ fn counters_for_rate_damage_and_samples() {
     assert_eq!(named(&all, "C", "cpu %").len(), 1);
     assert_eq!(named(&all, "C", "rss MiB")[0]["args"]["value"], 1024.0);
     assert_eq!(named(&all, "C", "gpu %").len(), 1);
+    assert_eq!(named(&all, "C", "pss MiB")[0]["args"]["value"], 512.0);
+    assert_eq!(
+        named(&all, "C", "gpu proc mem MiB")[0]["args"]["value"],
+        300.0
+    );
 }
 
 #[test]
@@ -167,4 +172,59 @@ fn empty_trace_exports() {
     ));
     let events = export(&trace);
     assert_eq!(named(&events, "M", "process_name").len(), 1);
+}
+
+#[test]
+fn meter_rates_from_cumulative_samples() {
+    use crate::event::Event;
+    use fakeland_types::ProcessId;
+    let mut trace = every_event_trace();
+    let t = trace.end();
+    for (k, (cpu, switches, uj, busy)) in [
+        (0u64, 0u64, 0u64, 0u64),
+        (50_000_000, 100, 2_000_000, 25_000_000),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let at = t + Nanos::from_millis(100 * (k as i64 + 1));
+        trace.push(
+            at,
+            Event::ProcessDetail {
+                pid: ProcessId(9),
+                cpu_ns_total: cpu,
+                ctx_switches_total: switches,
+                pss_bytes: None,
+                private_bytes: None,
+                swap_bytes: None,
+                hwm_bytes: None,
+            },
+        );
+        trace.push(
+            at,
+            Event::EnergySample {
+                domain: "gpu-nvml-0".into(),
+                microjoules_total: uj,
+            },
+        );
+        trace.push(
+            at,
+            Event::GpuProcessSample {
+                pid: ProcessId(9),
+                mem_bytes: None,
+                busy_ns_total: Some(busy),
+                util_percent: None,
+                source: "fdinfo:i915".into(),
+            },
+        );
+    }
+    let events = export(&trace);
+    let cpu = named(&events, "C", "cpu ms/s");
+    assert!((cpu[0]["args"]["value"].as_f64().unwrap() - 500.0).abs() < 1e-6);
+    let wake = named(&events, "C", "wakeups/s");
+    assert!((wake[0]["args"]["value"].as_f64().unwrap() - 1000.0).abs() < 1e-6);
+    let watts = named(&events, "C", "gpu-nvml-0 W");
+    assert!((watts[0]["args"]["value"].as_f64().unwrap() - 20.0).abs() < 1e-6);
+    let busy = named(&events, "C", "gpu proc %");
+    assert!((busy[0]["args"]["value"].as_f64().unwrap() - 25.0).abs() < 1e-6);
 }

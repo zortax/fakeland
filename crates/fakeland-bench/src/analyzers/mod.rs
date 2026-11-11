@@ -4,6 +4,7 @@
 pub mod buffers;
 pub mod coalescing;
 pub mod drag;
+pub mod frame_cost;
 pub mod idle;
 pub mod latency;
 pub mod pacing;
@@ -19,6 +20,7 @@ pub mod util;
 pub use buffers::Buffers;
 pub use coalescing::InputCoalescing;
 pub use drag::DragFollow;
+pub use frame_cost::FrameCost;
 pub use idle::IdleEfficiency;
 pub use latency::Latency;
 pub use pacing::FramePacing;

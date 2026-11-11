@@ -73,6 +73,9 @@ impl Event {
             Self::GpuSample { .. } => "gpu_sample",
             Self::Clipboard { .. } => "clipboard",
             Self::DeadlineWake { .. } => "deadline_wake",
+            Self::ProcessDetail { .. } => "process_detail",
+            Self::GpuProcessSample { .. } => "gpu_process_sample",
+            Self::EnergySample { .. } => "energy_sample",
             Self::Unknown => "unknown",
         }
     }
@@ -228,6 +231,26 @@ mod tests {
                 output: OutputId(1),
                 deadline: Timestamp(5),
                 woke: Timestamp(7),
+            },
+            Event::ProcessDetail {
+                pid: ProcessId(3),
+                cpu_ns_total: 1,
+                ctx_switches_total: 2,
+                pss_bytes: None,
+                private_bytes: None,
+                swap_bytes: None,
+                hwm_bytes: Some(4),
+            },
+            Event::GpuProcessSample {
+                pid: ProcessId(3),
+                mem_bytes: Some(1),
+                busy_ns_total: None,
+                util_percent: None,
+                source: "nvml".into(),
+            },
+            Event::EnergySample {
+                domain: "cpu-package-0".into(),
+                microjoules_total: 9,
             },
         ];
         for e in events {

@@ -9,6 +9,7 @@ mod emitter;
 mod error;
 mod frames;
 mod inputs;
+mod meters;
 mod tracks;
 mod write;
 

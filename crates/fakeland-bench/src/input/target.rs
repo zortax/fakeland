@@ -1,7 +1,7 @@
 //! The window under test.
 
 use fakeland::WindowInfo;
-use fakeland_types::{Logical, OutputId, Rect, SurfaceId, WindowId};
+use fakeland_types::{Logical, OutputId, ProcessId, Rect, SurfaceId, WindowId};
 use serde::{Deserialize, Serialize};
 
 /// The window under test, as the compositor saw it when the iteration started.
@@ -17,6 +17,12 @@ pub struct Target {
     pub geometry: Rect<Logical>,
     /// The app id.
     pub app_id: String,
+    /// The pid of the client process.
+    #[serde(default)]
+    pub pid: Option<ProcessId>,
+    /// The launched process that the client descends from.
+    #[serde(default)]
+    pub app: Option<ProcessId>,
 }
 
 impl From<&WindowInfo> for Target {
@@ -27,6 +33,8 @@ impl From<&WindowInfo> for Target {
             output: w.output,
             geometry: w.geometry,
             app_id: w.app_id.clone(),
+            pid: w.pid,
+            app: w.app,
         }
     }
 }

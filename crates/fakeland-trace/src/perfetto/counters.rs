@@ -1,11 +1,12 @@
-//! Counter tracks: frame rate and damage per surface, process and GPU samples, and compositor
-//! wake lateness per output.
+//! Counter tracks: frame rate and damage per surface, process and GPU samples, the cumulative
+//! meters, and compositor wake lateness per output.
 
 use fakeland_types::SurfaceId;
 
 use crate::event::Event;
 use crate::perfetto::chrome::ChromeEvent;
 use crate::perfetto::emitter::{COMPOSITOR_PID, Emitter};
+use crate::perfetto::meters;
 
 const MIB: f64 = 1024.0 * 1024.0;
 
@@ -13,6 +14,7 @@ const MIB: f64 = 1024.0 * 1024.0;
 pub(crate) fn emit(em: &mut Emitter<'_>) {
     surfaces(em);
     samples(em);
+    meters::emit(em);
     lateness(em);
 }
 

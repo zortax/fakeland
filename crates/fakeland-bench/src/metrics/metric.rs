@@ -27,6 +27,12 @@ pub enum Unit {
     Bytes,
     /// A score in `0..=100`.
     Score,
+    /// Milliseconds per second of wall time.
+    MsPerS,
+    /// Events per second.
+    PerS,
+    /// Watts.
+    Watts,
 }
 
 impl Unit {
@@ -43,6 +49,9 @@ impl Unit {
             Self::Percent => "%",
             Self::Bytes => "B",
             Self::Score => "pts",
+            Self::MsPerS => "ms/s",
+            Self::PerS => "/s",
+            Self::Watts => "W",
         }
     }
 }
@@ -173,5 +182,11 @@ mod tests {
             "\"px_per_s\""
         );
         assert_eq!(Unit::Ms.label(), "ms");
+        assert_eq!(
+            serde_json::to_string(&Unit::MsPerS).unwrap(),
+            "\"ms_per_s\""
+        );
+        assert_eq!(Unit::PerS.label(), "/s");
+        assert_eq!(serde_json::to_string(&Unit::Watts).unwrap(), "\"watts\"");
     }
 }

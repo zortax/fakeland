@@ -560,6 +560,26 @@ pub(crate) fn every_event() -> Vec<Event> {
             deadline: Timestamp(990_000_000),
             woke: Timestamp(990_050_000),
         },
+        Event::ProcessDetail {
+            pid: ProcessId(9),
+            cpu_ns_total: 2_000_000_000,
+            ctx_switches_total: 5_000,
+            pss_bytes: Some(512 << 20),
+            private_bytes: Some(256 << 20),
+            swap_bytes: Some(0),
+            hwm_bytes: Some(1 << 30),
+        },
+        Event::GpuProcessSample {
+            pid: ProcessId(9),
+            mem_bytes: Some(300 << 20),
+            busy_ns_total: Some(40_000_000),
+            util_percent: None,
+            source: "fdinfo:amdgpu".into(),
+        },
+        Event::EnergySample {
+            domain: "cpu-package-0".into(),
+            microjoules_total: 7_000_000,
+        },
         Event::WindowUnmapped {
             window: WindowId(1),
         },

@@ -409,6 +409,8 @@ impl Synth {
             output: OUT,
             geometry: Rect::new(0, 0, self.size.0, self.size.1),
             app_id: "app".into(),
+            pid: Some(ProcessId(100)),
+            app: Some(ProcessId(100)),
         }))
     }
 }

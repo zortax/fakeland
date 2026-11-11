@@ -34,6 +34,9 @@ pub struct ClickParams {
     pub button: Button,
     /// Clicks again between repeats to toggle the state back.
     pub toggle: bool,
+    /// The time between the press and the release. Zero releases at once, so an app that acts
+    /// on the release and an app that acts on the press start from the same time.
+    pub hold: Dur,
 }
 
 impl Default for ClickParams {
@@ -44,6 +47,7 @@ impl Default for ClickParams {
             position: WindowPoint::CENTER,
             button: Button::Left,
             toggle: true,
+            hold: Dur::from_millis(40),
         }
     }
 }
@@ -63,11 +67,17 @@ impl Spec for Click {
         }
         let seed = p.common.seed();
         let probe = p.probe.clone();
-        let (at, button, toggle) = (p.position, p.button, p.toggle);
+        let (at, button, toggle, hold) = (p.position, p.button, p.toggle, p.hold);
         let bench = Bench::new(Self::NAME)
             .scenario_fn(move |cx| {
                 let pos = at.at(cx.window());
-                let click = Action::Pointer(PointerAction::click(Some(pos), button));
+                let click = Action::Pointer(PointerAction::Click {
+                    at: Some(pos),
+                    button,
+                    count: 1,
+                    interval: Dur::from_millis(120),
+                    hold,
+                });
                 let undo = toggle.then(|| click.clone());
                 probe.scenario("click", cx, click, undo, seed)
             })

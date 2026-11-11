@@ -382,6 +382,43 @@ pub enum Event {
         /// The time the compositor thread woke for the deadline.
         woke: Timestamp,
     },
+    /// Cumulative CPU, scheduler and memory counters of a process tree.
+    ProcessDetail {
+        /// The root process.
+        pid: ProcessId,
+        /// The time on CPU of every member since sampling started, in nanoseconds.
+        cpu_ns_total: u64,
+        /// The voluntary and involuntary context switches of every member thread.
+        ctx_switches_total: u64,
+        /// The proportional set size of every member in bytes.
+        pss_bytes: Option<u64>,
+        /// The private clean and dirty memory of every member in bytes.
+        private_bytes: Option<u64>,
+        /// The swapped memory of every member in bytes.
+        swap_bytes: Option<u64>,
+        /// The largest peak resident set of a member in bytes.
+        hwm_bytes: Option<u64>,
+    },
+    /// A GPU sample of a process tree.
+    GpuProcessSample {
+        /// The root process.
+        pid: ProcessId,
+        /// GPU memory of every member in bytes.
+        mem_bytes: Option<u64>,
+        /// The GPU engine busy time of every member since sampling started, in nanoseconds.
+        busy_ns_total: Option<u64>,
+        /// GPU utilization of every member in percent, from a driver that reports no busy time.
+        util_percent: Option<f64>,
+        /// The source, for example `nvml` or `fdinfo:amdgpu`.
+        source: String,
+    },
+    /// A cumulative energy counter of a device.
+    EnergySample {
+        /// The domain, for example `cpu-package-0` or `gpu-nvml-0`.
+        domain: String,
+        /// The energy since the counter start in microjoules.
+        microjoules_total: u64,
+    },
     /// An event of a newer format that this build does not know.
     #[serde(other)]
     Unknown,

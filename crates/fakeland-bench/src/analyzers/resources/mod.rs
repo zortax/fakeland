@@ -1,5 +1,5 @@
-//! Resources: CPU, memory and thread counts of app processes and GPU use, from the sample records
-//! of the trace.
+//! Resources: CPU, memory and thread counts of app process trees, their CPU time, wakeups, memory
+//! detail and GPU use, device GPU use, and device energy, from the sample records of the trace.
 
 mod analyzer;
 mod report;
@@ -8,4 +8,4 @@ mod report;
 mod tests;
 
 pub use analyzer::Resources;
-pub use report::{GpuResources, ProcessResources, ResourcesReport};
+pub use report::{EnergyDomain, GpuResources, ProcessResources, ResourcesReport};
