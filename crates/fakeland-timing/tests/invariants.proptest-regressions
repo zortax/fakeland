@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 79ee76c2587dd04d50b44cb05127154aeabeb6a00e65a3016a4c431b4cd74fa9 # shrinks to cfg = TimingConfig { mode: Fixed { refresh: Hz(30.0) }, latch_offset: Nanos(0), callbacks: AtVblank, perturbation: None, zero_copy: false }, ops = [Submit { surface: 1, content: false, callback: false, set_barrier: true, wait_barrier: false, pending: false, ready_delay_us: 0, target_us: None }, Submit { surface: 2, content: false, callback: false, set_barrier: false, wait_barrier: false, pending: false, ready_delay_us: 0, target_us: None }, Submit { surface: 1, content: false, callback: false, set_barrier: false, wait_barrier: true, pending: false, ready_delay_us: 0, target_us: None }]

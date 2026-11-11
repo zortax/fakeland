@@ -1,0 +1,67 @@
+[package]
+name = "fakeland-examples"
+description = "Runnable examples of the fakeland library"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+autoexamples = false
+
+[lib]
+path = "common.rs"
+
+[[example]]
+name = "quickstart"
+path = "quickstart.rs"
+
+[[example]]
+name = "run"
+path = "run.rs"
+
+[[example]]
+name = "a11y"
+path = "a11y.rs"
+
+[[example]]
+name = "scroll_matrix"
+path = "scroll_matrix.rs"
+
+[[example]]
+name = "hover_latency"
+path = "hover_latency.rs"
+
+[[example]]
+name = "custom_reactor"
+path = "custom_reactor.rs"
+
+[[example]]
+name = "display_timing"
+path = "display_timing.rs"
+
+[[example]]
+name = "live_trace"
+path = "live_trace.rs"
+
+[[example]]
+name = "computer_use"
+path = "computer_use.rs"
+
+[[example]]
+name = "bench_compare"
+path = "bench_compare.rs"
+
+[[example]]
+name = "record_video"
+path = "record_video.rs"
+
+[dependencies]
+fakeland.workspace = true
+fakeland-bench.workspace = true
+fakeland-scenario.workspace = true
+fakeland-timing.workspace = true
+fakeland-trace.workspace = true
+fakeland-types.workspace = true
+fakeland-vision.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing-subscriber.workspace = true

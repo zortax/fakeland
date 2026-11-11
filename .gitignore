@@ -1,0 +1,7 @@
+/target
+
+# Core dumps.
+core.*
+
+# Local design notes and feature plans.
+/planning/

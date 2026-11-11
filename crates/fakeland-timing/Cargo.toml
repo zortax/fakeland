@@ -1,0 +1,15 @@
+[package]
+name = "fakeland-timing"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+fakeland-types.workspace = true
+schemars.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+serde_json.workspace = true

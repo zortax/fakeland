@@ -1,0 +1,21 @@
+[package]
+name = "fakeland-bench"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+fakeland.workspace = true
+fakeland-scenario.workspace = true
+fakeland-timing.workspace = true
+fakeland-trace.workspace = true
+fakeland-types.workspace = true
+fakeland-vision.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[[bench]]
+name = "presets"
+harness = false

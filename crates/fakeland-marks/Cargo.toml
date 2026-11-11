@@ -1,0 +1,15 @@
+[package]
+name = "fakeland-marks"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+fakeland-protocol = { workspace = true, features = ["client"] }
+fakeland-types.workspace = true
+thiserror.workspace = true
+wayland-client.workspace = true
+
+[dev-dependencies]
+fakeland-protocol = { workspace = true, features = ["client", "server"] }
+wayland-server.workspace = true

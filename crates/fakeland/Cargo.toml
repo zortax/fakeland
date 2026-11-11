@@ -1,0 +1,50 @@
+[package]
+name = "fakeland"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+base64.workspace = true
+fakeland-a11y.workspace = true
+fakeland-protocol = { workspace = true, features = ["server"] }
+fakeland-scenario.workspace = true
+fakeland-timing.workspace = true
+fakeland-trace.workspace = true
+fakeland-types.workspace = true
+fakeland-vision.workspace = true
+futures-channel.workspace = true
+futures-util.workspace = true
+nvml-wrapper = { workspace = true, optional = true }
+regex.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+smithay = { workspace = true, features = [
+    "wayland_frontend",
+    "desktop",
+    "backend_drm",
+    "backend_egl",
+    "backend_gbm",
+    "renderer_gl",
+    "renderer_pixman",
+    "renderer_multi",
+] }
+thiserror.workspace = true
+tracing.workspace = true
+zbus.workspace = true
+wayland-client = { workspace = true, optional = true }
+# Turns on the client side of the protocols that smithay re-exports.
+wayland-protocols = { workspace = true, optional = true }
+
+[features]
+default = []
+# A nested window on the host desktop that shows the outputs and forwards input.
+viewer = ["dep:wayland-client", "dep:wayland-protocols"]
+# GPU utilization and memory samples of NVIDIA GPUs through NVML.
+nvml = ["dep:nvml-wrapper"]
+
+[dev-dependencies]
+tracing-subscriber.workspace = true
+wayland-client.workspace = true
+wayland-protocols-wlr.workspace = true

@@ -1,0 +1,72 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "examples"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+fakeland-types = { path = "crates/fakeland-types" }
+fakeland-timing = { path = "crates/fakeland-timing" }
+fakeland-trace = { path = "crates/fakeland-trace" }
+fakeland-vision = { path = "crates/fakeland-vision" }
+fakeland-scenario = { path = "crates/fakeland-scenario" }
+fakeland-protocol = { path = "crates/fakeland-protocol" }
+fakeland-marks = { path = "crates/fakeland-marks" }
+fakeland = { path = "crates/fakeland" }
+fakeland-bench = { path = "crates/fakeland-bench" }
+fakeland-control = { path = "crates/fakeland-control" }
+fakeland-a11y = { path = "crates/fakeland-a11y" }
+
+# smithay re-exports calloop, rustix, wayland-server, wayland-protocols, xkbcommon, drm, gbm and
+# winit. Crates that use smithay name those through `smithay::reexports`. The pure crates name
+# rustix here at a version smithay accepts.
+smithay = { version = "0.7.0", default-features = false }
+rustix = { version = "1.1.6", features = ["time", "fs", "process", "event", "net", "pipe", "mm", "param", "thread"] }
+wayland-client = "0.31.15"
+wayland-backend = "0.3.17"
+wayland-server = "0.31.14"
+wayland-scanner = "0.31.11"
+wayland-protocols = { version = "0.32.13", features = ["client", "staging", "unstable"] }
+wayland-protocols-wlr = { version = "0.3.12", features = ["client"] }
+
+anyhow = "1.0.104"
+atspi = { version = "0.30.0", default-features = false }
+base64 = "0.23.1"
+bytemuck = "1.25.2"
+clap = { version = "4.6.7", features = ["derive"] }
+futures-channel = "0.3.34"
+futures-util = "0.3.34"
+nvml-wrapper = "0.13.0"
+parking_lot = "0.13.0"
+png = "0.18.1"
+process-wrap = { version = "10.0.1", default-features = false }
+proptest = "1.12.0"
+rand = "0.10.3"
+regex = "1.13.1"
+rmcp = { version = "3.9.0", default-features = false }
+rustfft = "6.4.1"
+schemars = "1.2.3"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tempfile = "3.27.0"
+thiserror = "2.0.21"
+tokio = "1.54.1"
+tokio-util = { version = "0.7.20", features = ["rt"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+xkbcommon = { version = "0.9.0", default-features = false }
+# atspi 0.30 builds on zbus 5.
+zbus = { version = "5.19.0", default-features = false, features = ["async-io"] }
+
+[profile.dev]
+opt-level = 1
+# Line tables keep file and line numbers in backtraces at a fraction of full debug info.
+debug = "line-tables-only"
+
+# Smithay, the renderer and image analysis stay fast in debug builds.
+[profile.dev.package."*"]
+opt-level = 2
+debug = false

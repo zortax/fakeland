@@ -1,0 +1,26 @@
+[package]
+name = "fakeland-testclient"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "fakeland-testclient"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+fakeland-marks.workspace = true
+fakeland-types.workspace = true
+rustix.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+wayland-client.workspace = true
+wayland-protocols.workspace = true
+xkbcommon.workspace = true
+
+[dev-dependencies]
+fakeland-protocol = { workspace = true, features = ["server"] }
+wayland-protocols = { workspace = true, features = ["server"] }
+wayland-server.workspace = true

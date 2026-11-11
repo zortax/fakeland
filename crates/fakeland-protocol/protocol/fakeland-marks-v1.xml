@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="fakeland_marks_v1">
+  <copyright>
+    Copyright 2026 the fakeland authors.
+    SPDX-License-Identifier: Apache-2.0
+  </copyright>
+
+  <description summary="app instrumentation marks for frame and input attribution">
+    This protocol lets a client attach instrumentation marks to the commits of
+    its surfaces and to its connection. The compositor records the marks in its
+    trace next to its own timestamps.
+
+    The compositor tells the client which of its injected input events comes
+    next on the connection. The client tells the compositor which commit
+    contains the effect of which input event, which app frame a commit carries,
+    and how long the phases of a frame took on the client side.
+
+    Every time value in this protocol is on CLOCK_MONOTONIC. A 64-bit id
+    travels as two 32-bit halves: id_hi holds the high 32 bits and id_lo holds
+    the low 32 bits. A timestamp travels as seconds in two 32-bit halves plus a
+    nanosecond remainder, the same encoding wp_presentation uses.
+
+    A mark name is a non-empty UTF-8 string of at most 256 bytes.
+  </description>
+
+  <interface name="fakeland_marks_manager_v1" version="1">
+    <description summary="instrumentation marks for a client">
+      The global entry point of the protocol. A client binds it once per
+      connection.
+
+      The compositor sends input_event events on every manager object of the
+      client. A client that binds the global twice receives each input_event
+      on both objects.
+    </description>
+
+    <enum name="error">
+      <entry name="surface_exists" value="0"
+        summary="the surface already has a fakeland_surface_marks_v1 object"/>
+      <entry name="invalid_name" value="1"
+        summary="the mark name is empty or longer than 256 bytes"/>
+    </enum>
+
+    <enum name="input_kind">
+      <description summary="the kind of an injected input event">
+        The kind of the input event that an input_event event announces.
+      </description>
+      <entry name="pointer_motion" value="0"
+        summary="wl_pointer.motion, or wl_pointer.enter for the first motion over a surface"/>
+      <entry name="pointer_button" value="1" summary="wl_pointer.button"/>
+      <entry name="pointer_axis" value="2"
+        summary="wl_pointer axis events: axis, axis_source, axis_value120, axis_stop"/>
+      <entry name="key" value="3" summary="wl_keyboard.key"/>
+      <entry name="touch" value="4" summary="wl_touch down, motion, up or cancel"/>
+      <entry name="gesture" value="5"
+        summary="zwp_pointer_gestures_v1 swipe, pinch or hold events"/>
+      <entry name="text" value="6" summary="zwp_text_input_v3 commit_string and done"/>
+    </enum>
+
+    <request name="destroy" type="destructor">
+      <description summary="destroy the manager">
+        Destroys the manager object. The fakeland_surface_marks_v1 objects
+        that this manager created stay valid. The compositor sends no more
+        input_event events on this object.
+      </description>
+    </request>
+
+    <request name="get_surface_marks">
+      <description summary="create a marks object for a surface">
+        Creates a fakeland_surface_marks_v1 object for a wl_surface. The marks
+        object holds double-buffered state that applies on the next
+        wl_surface.commit of that surface.
+
+        A surface has at most one fakeland_surface_marks_v1 object at a time.
+        If the surface already has one, the compositor raises the
+        surface_exists error.
+      </description>
+      <arg name="id" type="new_id" interface="fakeland_surface_marks_v1"
+        summary="the new marks object"/>
+      <arg name="surface" type="object" interface="wl_surface"
+        summary="the surface that the marks attach to"/>
+    </request>
+
+    <request name="mark">
+      <description summary="record a client-level mark">
+        Records a named mark for the client. The compositor timestamps the
+        mark when it receives the request. The mark belongs to no surface and
+        no commit.
+
+        If the name is empty or longer than 256 bytes, the compositor raises
+        the invalid_name error.
+      </description>
+      <arg name="name" type="string" summary="the name of the mark"/>
+    </request>
+
+    <event name="input_event">
+      <description summary="the id of the next injected input event">
+        The compositor sends this event immediately before each injected input
+        event that it sends to this client, and in the same flush of the
+        connection. The events that follow on the connection carry the input
+        event with this id, up to the next input_event event. For pointer
+        events, that group ends with wl_pointer.frame.
+
+        The client reads this event when it handles the input event that
+        follows. It then passes the id to
+        fakeland_surface_marks_v1.input_handled on the commit that contains
+        the effect of that input event.
+
+        Input ids increase over the life of the compositor session. They are
+        unique across all clients.
+      </description>
+      <arg name="id_hi" type="uint" summary="high 32 bits of the input id"/>
+      <arg name="id_lo" type="uint" summary="low 32 bits of the input id"/>
+      <arg name="kind" type="uint" enum="input_kind" summary="the kind of the input event"/>
+    </event>
+  </interface>
+
+  <interface name="fakeland_surface_marks_v1" version="1">
+    <description summary="instrumentation marks for the commits of a surface">
+      Marks that attach to the commits of one wl_surface. Every request except
+      destroy sets double-buffered state. The compositor applies that state
+      on the next wl_surface.commit of the surface, records it on that commit
+      and clears it.
+
+      If the wl_surface is destroyed, every request except destroy raises the
+      no_surface error.
+    </description>
+
+    <enum name="error">
+      <entry name="no_surface" value="0" summary="the wl_surface is destroyed"/>
+      <entry name="invalid_span" value="1"
+        summary="a span ends before it begins, or a nanosecond value is 1000000000 or more"/>
+      <entry name="invalid_name" value="2"
+        summary="a span or mark name is empty or longer than 256 bytes"/>
+    </enum>
+
+    <request name="destroy" type="destructor">
+      <description summary="destroy the marks object">
+        Destroys the marks object. The compositor discards the pending state
+        that no commit applied. The surface can then get a new marks object.
+      </description>
+    </request>
+
+    <request name="frame">
+      <description summary="set the app frame id of the next commit">
+        Sets the app frame id of the next commit. The app chooses the ids.
+        Increasing ids let the compositor detect frames that the app skipped.
+        A second frame request before the commit replaces the first one.
+      </description>
+      <arg name="id_hi" type="uint" summary="high 32 bits of the app frame id"/>
+      <arg name="id_lo" type="uint" summary="low 32 bits of the app frame id"/>
+    </request>
+
+    <request name="input_handled">
+      <description summary="mark an input event as handled by the next commit">
+        States that the next commit contains the visible effect of the input
+        event with this id. The id comes from
+        fakeland_marks_manager_v1.input_event. A commit can contain the effect
+        of several input events, so the client can send this request more than
+        once before a commit. The compositor ignores a repeated id.
+      </description>
+      <arg name="id_hi" type="uint" summary="high 32 bits of the input id"/>
+      <arg name="id_lo" type="uint" summary="low 32 bits of the input id"/>
+    </request>
+
+    <request name="span">
+      <description summary="attach a client-side phase to the next commit">
+        Attaches a named client-side phase of the next commit, for example
+        layout, paint or GPU submit. The begin and end times are on
+        CLOCK_MONOTONIC. The client can send several spans before a commit,
+        and spans can overlap.
+
+        If the span ends before it begins, or if a nanosecond value is
+        1000000000 or more, the compositor raises the invalid_span error. If
+        the name is empty or longer than 256 bytes, the compositor raises the
+        invalid_name error.
+      </description>
+      <arg name="name" type="string" summary="the name of the phase"/>
+      <arg name="begin_sec_hi" type="uint" summary="high 32 bits of the begin seconds"/>
+      <arg name="begin_sec_lo" type="uint" summary="low 32 bits of the begin seconds"/>
+      <arg name="begin_nsec" type="uint" summary="nanoseconds part of the begin time"/>
+      <arg name="end_sec_hi" type="uint" summary="high 32 bits of the end seconds"/>
+      <arg name="end_sec_lo" type="uint" summary="low 32 bits of the end seconds"/>
+      <arg name="end_nsec" type="uint" summary="nanoseconds part of the end time"/>
+    </request>
+
+    <request name="mark">
+      <description summary="attach a named mark to the next commit">
+        Attaches a named mark to the next commit. The client can send several
+        marks before a commit.
+
+        If the name is empty or longer than 256 bytes, the compositor raises
+        the invalid_name error.
+      </description>
+      <arg name="name" type="string" summary="the name of the mark"/>
+    </request>
+  </interface>
+</protocol>

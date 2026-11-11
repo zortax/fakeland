@@ -1,0 +1,25 @@
+[package]
+name = "fakeland-control"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+base64.workspace = true
+fakeland-bench.workspace = true
+fakeland.workspace = true
+fakeland-scenario.workspace = true
+fakeland-timing.workspace = true
+fakeland-trace.workspace = true
+fakeland-types.workspace = true
+futures-channel.workspace = true
+futures-util.workspace = true
+rustix.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

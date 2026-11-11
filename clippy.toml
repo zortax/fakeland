@@ -1,0 +1,7 @@
+# Every timestamp comes from the session clock on CLOCK_MONOTONIC. The clock module reads the
+# system clock with an `allow`; every other read is a lint error.
+disallowed-methods = [
+    { path = "std::time::Instant::now", reason = "read time through the session clock" },
+    { path = "std::time::SystemTime::now", reason = "read time through the session clock" },
+    { path = "rustix::time::clock_gettime", reason = "read time through the session clock" },
+]

@@ -1,0 +1,20 @@
+[package]
+name = "fakeland-protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+client = ["dep:wayland-client", "dep:wayland-backend", "dep:wayland-scanner"]
+server = ["dep:wayland-server", "dep:wayland-backend", "dep:wayland-scanner"]
+
+[dependencies]
+fakeland-types.workspace = true
+thiserror.workspace = true
+wayland-backend = { workspace = true, optional = true }
+wayland-client = { workspace = true, optional = true }
+wayland-scanner = { workspace = true, optional = true }
+wayland-server = { workspace = true, optional = true }
+
+[dev-dependencies]
+fakeland-protocol = { path = ".", features = ["client", "server"] }
