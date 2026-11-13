@@ -23,7 +23,7 @@ use crate::reactor::Reactors;
 use crate::recording::EventBus;
 use crate::render::{CaptureTargets, RenderBackend, ShmReader};
 use crate::runner::Runs;
-use crate::sampling::Sampling;
+use crate::sampling::{GpuGate, Sampling};
 use crate::shell::Windows;
 use crate::video::Recordings;
 use crate::waits::{Observers, Waiters};
@@ -100,6 +100,8 @@ pub struct State {
     pub reactors: Reactors,
     /// Resource sampling, when the config turns it on.
     pub sampling: Option<Sampling>,
+    /// The gate that the sampler thread holds during its GPU queries.
+    pub gpu_gate: GpuGate,
     /// Running video recordings.
     pub recordings: Recordings,
     /// The nested viewer, while it runs.

@@ -62,6 +62,15 @@ enum Source {
 }
 
 impl Source {
+    /// Returns true when a read stalls other GPU work.
+    fn stalls(&self) -> bool {
+        match self {
+            Self::Powercap { .. } | Self::Hwmon(_) => false,
+            #[cfg(feature = "nvml")]
+            Self::Nvml(_) => true,
+        }
+    }
+
     fn read(&mut self) -> Option<u64> {
         match self {
             Self::Powercap {
@@ -108,10 +117,13 @@ impl EnergyMeter {
         self.domains.iter().map(|d| d.0.as_str()).collect()
     }
 
-    /// Reads every domain. A failed read leaves its domain out of this sample.
-    pub fn read(&mut self) -> Vec<EnergyReading> {
+    /// Reads every domain. A failed read leaves its domain out of this sample. The NVML counter
+    /// stalls other GPU work of the host for several milliseconds, so it is read only when `slow`
+    /// is true.
+    pub fn read(&mut self, slow: bool) -> Vec<EnergyReading> {
         self.domains
             .iter_mut()
+            .filter(|(_, s)| slow || !s.stalls())
             .filter_map(|(domain, s)| {
                 Some(EnergyReading {
                     domain: domain.clone(),
@@ -209,9 +221,9 @@ mod tests {
         domains.extend(hwmon_domains(&root.join("device")));
         let mut meter = EnergyMeter { domains };
         assert_eq!(meter.names(), ["cpu-package-0", "gpu-hwmon-0"]);
-        assert_eq!(meter.read()[1].microjoules_total, 123456);
+        assert_eq!(meter.read(false)[1].microjoules_total, 123456);
         fs::write(root.join("powercap/intel-rapl:0/energy_uj"), "100\n").unwrap();
-        let r = meter.read();
+        let r = meter.read(false);
         assert_eq!(r[0].domain, "cpu-package-0");
         assert_eq!(r[0].microjoules_total, 1100);
         fs::remove_dir_all(&root).unwrap();

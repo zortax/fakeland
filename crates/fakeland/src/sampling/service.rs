@@ -54,7 +54,8 @@ impl State {
                 }
             })
             .map_err(|e| std::io::Error::other(e.error.to_string()))?;
-        let thread = SamplerThread::spawn(config, self.clock.clone(), node, tx)?;
+        let thread =
+            SamplerThread::spawn(config, self.clock.clone(), node, self.gpu_gate.clone(), tx)?;
         let observer = self.observe(|state, record| {
             let Some(sampling) = &state.sampling else {
                 return Observe::Remove;
@@ -189,8 +190,13 @@ impl State {
         if gpu.is_some() {
             state.gpu = gpu;
         }
-        if !energy.is_empty() {
-            state.energy = energy;
+        // A sample without the slow read lacks the GPU domain: each domain keeps its latest
+        // reading.
+        for e in energy {
+            match state.energy.iter_mut().find(|l| l.domain == e.domain) {
+                Some(latest) => *latest = e,
+                None => state.energy.push(e),
+            }
         }
     }
 }

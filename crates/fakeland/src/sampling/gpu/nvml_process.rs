@@ -1,7 +1,9 @@
 //! GPU use of each tree through NVML. Memory is the used GPU memory of each member in the graphics
 //! and compute process lists. Utilization is the mean SM utilization of the samples that the
 //! driver buffered for each member since the previous read, summed over members. NVML counts no
-//! busy time, so the readings carry utilization and no busy time.
+//! busy time, so the readings carry utilization and no busy time. The utilization read stalls
+//! other GPU work of the host for several milliseconds, so it runs in slow reads only; the driver
+//! keeps the samples in between.
 
 use std::collections::HashMap;
 
@@ -96,9 +98,14 @@ impl GpuProcessProbe for NvmlProcessProbe {
         "nvml"
     }
 
-    fn read(&mut self, _: Timestamp, trees: &[TreeMembers<'_>]) -> Vec<GpuProcessReading> {
+    fn read(
+        &mut self,
+        _: Timestamp,
+        trees: &[TreeMembers<'_>],
+        slow: bool,
+    ) -> Vec<GpuProcessReading> {
         let memory = self.memory();
-        let util = self.utilization();
+        let util = if slow { self.utilization() } else { None };
         let mut out = Vec::new();
         for tree in trees {
             let listed: Vec<u64> = tree

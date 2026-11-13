@@ -1,7 +1,8 @@
 //! The readback queue of a probe repeat. Pixel candidates wait in commit order, so the earliest
 //! commit that shows the response wins. A readback runs clear of output wakes: near a wake the
-//! queue waits for the slot after it, and later candidates wait behind the queued ones. A
-//! discarded candidate goes at once, before the vblank that releases its buffer.
+//! queue waits for the slot after it, and later candidates wait behind the queued ones. The queue
+//! also waits while the sampler thread holds the GPU gate. A discarded candidate goes at once,
+//! before the vblank that releases its buffer.
 
 use std::collections::VecDeque;
 
@@ -82,12 +83,20 @@ pub(super) fn enqueue(state: &mut State, run: &Shared, c: Candidate) -> Step {
     if waiting {
         return Step::Continue;
     }
-    drain(state, run, 0)
+    drain(state, run, 0, 0)
 }
 
-/// Tests the queued candidates in order while each readback stays clear of the next output wake.
-/// Near a wake the drain goes on after it, at most [`guard::MAX_DEFERRALS`] times in a row.
-pub(super) fn drain(state: &mut State, run: &Shared, mut deferrals: u32) -> Step {
+/// Tests the queued candidates in order while each readback stays clear of the next output wake
+/// and of the GPU queries of the sampler. Near a wake the drain goes on after it, at most
+/// [`guard::MAX_DEFERRALS`] times in a row. While the sampler holds the GPU gate the drain tries
+/// again after [`guard::GATE_RETRY`], at most [`guard::MAX_GATE_WAITS`] times in a row.
+pub(super) fn drain(
+    state: &mut State,
+    run: &Shared,
+    mut deferrals: u32,
+    mut gate_waits: u32,
+) -> Step {
+    let gate = state.gpu_gate.clone();
     loop {
         let (token, worst) = {
             let r = run.borrow();
@@ -99,9 +108,16 @@ pub(super) fn drain(state: &mut State, run: &Shared, mut deferrals: u32) -> Step
             }
             (rep.token.clone(), r.readback_max)
         };
-        if deferrals < guard::MAX_DEFERRALS
-            && let Some(at) = guard::readback_slot(state, guard::guard_for(worst))
-        {
+        let held = gate.try_enter();
+        let later = if held.is_none() && gate_waits < guard::MAX_GATE_WAITS {
+            Some((state.now() + guard::GATE_RETRY, deferrals, gate_waits + 1))
+        } else if deferrals < guard::MAX_DEFERRALS {
+            guard::readback_slot(state, guard::guard_for(worst))
+                .map(|at| (at, deferrals + 1, gate_waits))
+        } else {
+            None
+        };
+        if let Some((at, deferrals, gate_waits)) = later {
             set_waiting(run, true);
             let run = run.clone();
             state.schedule_at(at, move |state| {
@@ -109,7 +125,7 @@ pub(super) fn drain(state: &mut State, run: &Shared, mut deferrals: u32) -> Step
                     return;
                 }
                 set_waiting(&run, false);
-                if drain(state, &run, deferrals + 1) == Step::Finished {
+                if drain(state, &run, deferrals, gate_waits) == Step::Finished {
                     finish_repeat(state, &run);
                 }
             });
@@ -121,7 +137,9 @@ pub(super) fn drain(state: &mut State, run: &Shared, mut deferrals: u32) -> Step
         if test_candidate(state, run, c) == Step::Finished {
             return Step::Finished;
         }
+        drop(held);
         deferrals = 0;
+        gate_waits = 0;
     }
 }
 

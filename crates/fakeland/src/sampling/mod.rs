@@ -6,6 +6,7 @@
 mod collect;
 mod cpu;
 mod energy;
+mod gate;
 mod gpu;
 mod procfs;
 mod sampler;
@@ -16,6 +17,7 @@ mod switches;
 mod tree;
 
 pub use energy::EnergyReading;
+pub use gate::GpuGate;
 pub use gpu::GpuReading;
 pub use service::Sampling;
 pub use snapshot::{ProcessTreeSample, ResourceSnapshot};

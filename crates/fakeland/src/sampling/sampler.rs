@@ -1,6 +1,7 @@
 //! The sampler thread. It wakes at each sample time on the session clock, reads `/proc` for the
 //! trees of the launched roots, reads the GPU probes and the energy counters, then hands one batch
-//! to the compositor thread, which records it. Reads never run on the compositor thread.
+//! to the compositor thread, which records it. Reads never run on the compositor thread. The
+//! reads that stall other GPU work run once per slow interval, and hold the GPU gate.
 
 use std::path::PathBuf;
 use std::sync::mpsc::{self, RecvTimeoutError};
@@ -11,6 +12,7 @@ use smithay::reexports::calloop::channel::Sender;
 
 use super::collect::{TreeReading, TreeSample, Trees};
 use super::energy::{EnergyMeter, EnergyReading};
+use super::gate::GpuGate;
 use super::gpu::{
     GpuContext, GpuProcessChain, GpuProcessReading, GpuReading, TreeMembers, open_probe,
 };
@@ -60,12 +62,13 @@ impl SamplerThread {
         config: SamplingConfig,
         clock: SharedClock,
         node: Option<PathBuf>,
+        gate: GpuGate,
         out: Sender<Batch>,
     ) -> std::io::Result<Self> {
         let (control, rx) = mpsc::channel();
         let thread = thread::Builder::new()
             .name("fakeland-sampler".into())
-            .spawn(move || run(config, clock, node, rx, out))?;
+            .spawn(move || run(config, clock, node, gate, rx, out))?;
         Ok(Self {
             control,
             thread: Some(thread),
@@ -91,6 +94,7 @@ fn run(
     config: SamplingConfig,
     clock: SharedClock,
     node: Option<PathBuf>,
+    gate: GpuGate,
     rx: mpsc::Receiver<Control>,
     out: Sender<Batch>,
 ) {
@@ -116,6 +120,7 @@ fn run(
     }
     let mut trees = Trees::default();
     let mut next = clock.now();
+    let mut next_slow = next;
     loop {
         let wait = next.since(clock.now()).max(Nanos::ZERO);
         match rx.recv_timeout(wait.to_duration()) {
@@ -137,7 +142,13 @@ fn run(
         } else {
             TreeSample::default()
         };
+        let slow = t >= next_slow;
+        if slow {
+            next_slow = t + config.slow_interval;
+        }
         let gpu_reading = gpu.as_mut().and_then(|p| p.read());
+        // The slow reads hold the gate, so no readback of the compositor thread runs into them.
+        let held = slow.then(|| gate.enter());
         let gpu_tree_readings = match &mut gpu_trees {
             Some(chain) => {
                 for root in &sample.ended {
@@ -148,15 +159,20 @@ fn run(
                     .iter()
                     .map(|(root, pids)| TreeMembers { root: *root, pids })
                     .collect();
-                chain.read(t, &members)
+                chain.read(t, &members, slow)
             }
             None => Vec::new(),
         };
+        let energy_readings = energy
+            .as_mut()
+            .map(|meter| meter.read(slow))
+            .unwrap_or_default();
+        drop(held);
         let batch = Batch::Sample {
             trees: sample.readings,
             gpu: gpu_reading,
             gpu_trees: gpu_tree_readings,
-            energy: energy.as_mut().map(EnergyMeter::read).unwrap_or_default(),
+            energy: energy_readings,
             ended: sample.ended,
         };
         if out.send(batch).is_err() {

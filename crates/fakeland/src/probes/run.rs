@@ -135,22 +135,28 @@ pub(super) fn begin_repeat(state: &mut State, run: Shared) {
             state.start_wait(
                 &wait,
                 token,
-                Box::new(move |state, result| prepare_when_clear(state, run, result.is_ok(), 0)),
+                Box::new(move |state, result| prepare_when_clear(state, run, result.is_ok(), 0, 0)),
             );
         }
         _ => {
             state.schedule_in(settle.0, move |state| {
                 if !token.is_cancelled() {
-                    prepare_when_clear(state, run, true, 0);
+                    prepare_when_clear(state, run, true, 0, 0);
                 }
             });
         }
     }
 }
 
-/// Prepares a repeat now, or after the next display deadline when its baseline readbacks could
-/// make that deadline late.
-fn prepare_when_clear(state: &mut State, run: Shared, settled: bool, deferrals: u32) {
+/// Prepares a repeat now, or later when its baseline readbacks could make the next display
+/// deadline late or could run into a GPU query of the sampler.
+fn prepare_when_clear(
+    state: &mut State,
+    run: Shared,
+    settled: bool,
+    deferrals: u32,
+    gate_waits: u32,
+) {
     let (pixels, worst) = {
         let r = run.borrow();
         let pixels = matches!(
@@ -159,12 +165,23 @@ fn prepare_when_clear(state: &mut State, run: Shared, settled: bool, deferrals: 
         );
         (pixels, r.readback_max)
     };
-    if pixels
-        && deferrals < guard::MAX_DEFERRALS
-        && let Some(at) = guard::readback_slot(state, guard::guard_for(worst))
-    {
+    if !pixels {
+        prepare_repeat(state, run, settled);
+        return;
+    }
+    let gate = state.gpu_gate.clone();
+    let held = gate.try_enter();
+    let later = if held.is_none() && gate_waits < guard::MAX_GATE_WAITS {
+        Some((state.now() + guard::GATE_RETRY, deferrals, gate_waits + 1))
+    } else if deferrals < guard::MAX_DEFERRALS {
+        guard::readback_slot(state, guard::guard_for(worst))
+            .map(|at| (at, deferrals + 1, gate_waits))
+    } else {
+        None
+    };
+    if let Some((at, deferrals, gate_waits)) = later {
         state.schedule_at(at, move |state| {
-            prepare_when_clear(state, run, settled, deferrals + 1);
+            prepare_when_clear(state, run, settled, deferrals, gate_waits);
         });
         return;
     }

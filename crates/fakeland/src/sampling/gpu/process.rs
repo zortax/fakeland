@@ -42,8 +42,14 @@ pub trait GpuProcessProbe: Send + std::fmt::Debug {
     /// Returns the backend name, for example `fdinfo` or `nvml`.
     fn name(&self) -> &'static str;
 
-    /// Reads the trees at time `t`. Returns a reading for each tree with data.
-    fn read(&mut self, t: Timestamp, trees: &[TreeMembers<'_>]) -> Vec<GpuProcessReading>;
+    /// Reads the trees at time `t`. Returns a reading for each tree with data. A read that
+    /// stalls other GPU work runs only when `slow` is true.
+    fn read(
+        &mut self,
+        t: Timestamp,
+        trees: &[TreeMembers<'_>],
+        slow: bool,
+    ) -> Vec<GpuProcessReading>;
 
     /// Drops the state of a tree that ended.
     fn forget(&mut self, root: u32);
@@ -81,11 +87,17 @@ impl GpuProcessChain {
     }
 
     /// Reads every tree. Each backend reads every tree, so its counters stay current, and a tree
-    /// keeps the reading of the first backend with data.
-    pub fn read(&mut self, t: Timestamp, trees: &[TreeMembers<'_>]) -> Vec<GpuProcessReading> {
+    /// keeps the reading of the first backend with data. The reads that stall other GPU work run
+    /// only when `slow` is true.
+    pub fn read(
+        &mut self,
+        t: Timestamp,
+        trees: &[TreeMembers<'_>],
+        slow: bool,
+    ) -> Vec<GpuProcessReading> {
         let mut out: Vec<GpuProcessReading> = Vec::new();
         for probe in &mut self.probes {
-            for r in probe.read(t, trees) {
+            for r in probe.read(t, trees, slow) {
                 if r.has_data() && !out.iter().any(|o| o.root == r.root) {
                     out.push(r);
                 }
@@ -115,7 +127,7 @@ mod tests {
             self.0
         }
 
-        fn read(&mut self, _: Timestamp, _: &[TreeMembers<'_>]) -> Vec<GpuProcessReading> {
+        fn read(&mut self, _: Timestamp, _: &[TreeMembers<'_>], _: bool) -> Vec<GpuProcessReading> {
             self.1.clone()
         }
 
@@ -150,7 +162,7 @@ mod tests {
             ],
         };
         assert_eq!(chain.names(), ["fdinfo", "nvml"]);
-        let out = chain.read(Timestamp(0), &[]);
+        let out = chain.read(Timestamp(0), &[], true);
         assert_eq!(
             out,
             [

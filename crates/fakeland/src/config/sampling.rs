@@ -28,6 +28,14 @@ pub struct SamplingConfig {
     pub gpu_process: bool,
     /// Sample the energy counters of the CPU packages and the GPU.
     pub energy: bool,
+    /// The time between two reads of the slow GPU sources: the utilization of each tree and the
+    /// GPU energy counter through NVML. Each of these reads stalls other GPU work of the host,
+    /// such as a buffer allocation of an app or a readback of the compositor, for several
+    /// milliseconds, so they run less often than the other sources. Their counters lose nothing
+    /// between two reads.
+    #[serde(with = "as_dur")]
+    #[schemars(with = "Dur")]
+    pub slow_interval: Nanos,
 }
 
 impl Default for SamplingConfig {
@@ -39,6 +47,7 @@ impl Default for SamplingConfig {
             memory_detail: true,
             gpu_process: true,
             energy: true,
+            slow_interval: Nanos::from_secs(1),
         }
     }
 }
@@ -50,6 +59,12 @@ impl SamplingConfig {
             interval,
             ..Self::default()
         }
+    }
+
+    /// Returns the settings with a time between two reads of the slow GPU sources.
+    pub fn slow_interval(mut self, interval: Nanos) -> Self {
+        self.slow_interval = interval;
+        self
     }
 
     /// Returns the settings with process sampling on or off.

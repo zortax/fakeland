@@ -246,6 +246,7 @@ fn init(config: SessionConfig, clock: SharedClock) -> Result<Parts, StartError> 
         runs: Runs::default(),
         reactors: Reactors::default(),
         sampling: None,
+        gpu_gate: Default::default(),
         recordings: Recordings::default(),
         #[cfg(feature = "viewer")]
         viewer: None,

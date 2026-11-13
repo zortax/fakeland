@@ -50,7 +50,7 @@ impl GpuProcessProbe for FdinfoProbe {
         "fdinfo"
     }
 
-    fn read(&mut self, t: Timestamp, trees: &[TreeMembers<'_>]) -> Vec<GpuProcessReading> {
+    fn read(&mut self, t: Timestamp, trees: &[TreeMembers<'_>], _: bool) -> Vec<GpuProcessReading> {
         let mut out = Vec::new();
         for tree in trees {
             let clients = read_clients(tree.pids);
@@ -256,6 +256,6 @@ mod tests {
             root: u32::MAX,
             pids: &pids,
         }];
-        assert!(p.read(Timestamp(0), &trees).is_empty());
+        assert!(p.read(Timestamp(0), &trees, true).is_empty());
     }
 }
