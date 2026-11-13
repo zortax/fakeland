@@ -34,26 +34,7 @@ pub fn displacement(
         return Ok(0.0);
     }
     let scale = if next.scale > 0.0 { next.scale } else { 1.0 };
-    let mut shifts: Vec<i64> = Vec::new();
-    for h in hints.iter().filter(|h| h.is_finite()) {
-        let s = (h / scale).round() as i64;
-        if !shifts.iter().any(|x| (x - s).abs() < i64::from(WINDOW) / 3) {
-            shifts.push(s);
-        }
-    }
-    let cfg = MotionConfig {
-        max_shift: WINDOW,
-        axis: Some(axis),
-        ..MotionConfig::default()
-    };
-    let mut found: Vec<(f64, f64)> = Vec::new();
-    let mut last_err = MotionRejection::EmptyRegion;
-    for s in shifts {
-        match shifted(est, prev, next, axis, s, &cfg) {
-            Ok(answer) => found.push(answer),
-            Err(e) => last_err = e,
-        }
-    }
+    let (found, last_err) = near(est, prev, next, axis, hints);
     if let Some(px) = choose(&found, hints.first().copied().unwrap_or(0.0) / scale) {
         return Ok(px * scale);
     }
@@ -66,6 +47,43 @@ pub fn displacement(
         Ok(m) => Ok(-along(m, axis) * scale),
         Err(_) => Err(last_err),
     }
+}
+
+/// Searches a small window around each hint, in logical pixels, and returns the answers as
+/// `(displacement, confidence)` in capture pixels, with the reason of the last failed search.
+/// Frames of another size give no answers.
+pub fn near(
+    est: &mut MotionEstimator,
+    prev: &CapturedFrame,
+    next: &CapturedFrame,
+    axis: Axis,
+    hints: &[f64],
+) -> (Vec<(f64, f64)>, MotionRejection) {
+    if prev.image.width() != next.image.width() || prev.image.height() != next.image.height() {
+        return (Vec::new(), MotionRejection::SizeMismatch);
+    }
+    let scale = if next.scale > 0.0 { next.scale } else { 1.0 };
+    let mut shifts: Vec<i64> = Vec::new();
+    for h in hints.iter().filter(|h| h.is_finite()) {
+        let s = (h / scale).round() as i64;
+        if !shifts.iter().any(|x| (x - s).abs() < i64::from(WINDOW) / 3) {
+            shifts.push(s);
+        }
+    }
+    let cfg = MotionConfig {
+        max_shift: WINDOW,
+        axis: Some(axis),
+        ..MotionConfig::default()
+    };
+    let mut found = Vec::new();
+    let mut last_err = MotionRejection::EmptyRegion;
+    for s in shifts {
+        match shifted(est, prev, next, axis, s, &cfg) {
+            Ok(answer) => found.push(answer),
+            Err(e) => last_err = e,
+        }
+    }
+    (found, last_err)
 }
 
 /// Returns the answer nearest `expected` among the answers close to the best confidence.

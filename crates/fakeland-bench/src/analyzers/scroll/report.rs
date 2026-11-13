@@ -22,6 +22,10 @@ pub struct FrameStep {
     pub vblanks_missed: u64,
     /// The displacement the consumed scroll events ask for, in logical pixels.
     pub expected_px: f64,
+    /// The expected displacement times the content gain: the step an even scroll of the app
+    /// shows.
+    #[serde(default)]
+    pub target_px: f64,
     /// The content displacement in logical pixels; `None` when motion estimation rejected the
     /// pair.
     pub measured_px: Option<f64>,
@@ -48,6 +52,10 @@ pub struct ScrollReport {
     pub measured_total_px: f64,
     /// Measured over expected displacement on measured steps.
     pub tracking_ratio: Option<f64>,
+    /// Content pixels per scroll pixel of the input, estimated from the middle of the scroll; 1
+    /// when the app moves its content by the scroll distance.
+    #[serde(default = "unity")]
+    pub content_gain: f64,
     /// Steps inside the active scroll.
     pub active_steps: usize,
     /// Steps whose pair motion estimation rejected.
@@ -60,13 +68,13 @@ pub struct ScrollReport {
     pub stalls: u64,
     /// Steps much farther than the median step.
     pub double_steps: usize,
-    /// Measured minus expected displacement per step.
+    /// Measured minus target displacement per step.
     pub step_error_px: Option<Summary>,
-    /// The sum of absolute step errors over the sum of expected steps.
+    /// The sum of absolute step errors over the sum of target steps.
     pub relative_error: Option<f64>,
     /// The content velocity per step.
     pub velocity_px_s: Option<Summary>,
-    /// The mean of `|measured - expected| / interval` over measured steps.
+    /// The mean of `|measured - target| / interval` over measured steps.
     pub velocity_error_px_s: Option<f64>,
     /// The first scroll event to the first presented frame whose content moved.
     pub start_latency_ms: Option<f64>,
@@ -97,6 +105,7 @@ impl Metrics for ScrollReport {
             Unit::Px,
         );
         m.neutral("tracking_ratio", self.tracking_ratio, Unit::Ratio);
+        m.neutral("content_gain", Some(self.content_gain), Unit::Ratio);
         m.neutral("velocity_p50", self.velocity_px_s.p50(), Unit::PxPerS);
         m.lower("velocity_error", self.velocity_error_px_s, Unit::PxPerS);
         m.lower("start_latency", self.start_latency_ms, Unit::Ms);
@@ -107,4 +116,9 @@ impl Metrics for ScrollReport {
     fn samples(&self) -> Option<usize> {
         Some(self.active_steps.saturating_sub(self.rejected_steps))
     }
+}
+
+/// The content gain of a report without one.
+fn unity() -> f64 {
+    1.0
 }

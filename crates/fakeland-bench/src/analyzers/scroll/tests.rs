@@ -12,8 +12,17 @@ use crate::testing::{Synth, capture_of, captured, texture};
 /// that commits 5 ms after each vblank. Frames whose index is a multiple of `jank_every` present
 /// two refreshes late.
 fn scroll(events: u64, jank_every: u64) -> crate::input::AnalysisInput {
+    scroll_over(texture(160, 4000, 3), events, jank_every, 1)
+}
+
+/// `scroll` over the content `tall`, which moves `gain` pixels per scroll pixel.
+fn scroll_over(
+    tall: fakeland_vision::Image,
+    events: u64,
+    jank_every: u64,
+    gain: i32,
+) -> crate::input::AnalysisInput {
     let mut s = Synth::new();
-    let tall = texture(160, 4000, 3);
     let mut sent = Vec::new();
     for k in 0..events {
         let t = crate::testing::at_ms(100.0 + k as f64 * 1000.0 / 120.0);
@@ -32,7 +41,7 @@ fn scroll(events: u64, jank_every: u64) -> crate::input::AnalysisInput {
         index += 1;
         let jank = jank_every > 0 && index.is_multiple_of(jank_every);
         let commit_t = s.vblank(seq) + Nanos::from_millis(5);
-        let offset = sent.iter().filter(|t| **t <= commit_t).count() as i32 * 10;
+        let offset = sent.iter().filter(|t| **t <= commit_t).count() as i32 * 10 * gain;
         seq += if jank { 3 } else { 1 };
         let c = s.frame(commit_t, seq);
         let img = tall
@@ -166,4 +175,49 @@ fn a_long_step_over_periodic_rows_keeps_the_expected_period() {
             "step {step}: measured {px}"
         );
     }
+}
+
+#[test]
+fn an_app_gain_over_periodic_rows_is_measured() {
+    // Two or three content pixels per scroll pixel: 40 or 60 px per refresh over 32 px rows, so a
+    // search near the unscaled 20 px step finds a row alias.
+    for gain in [2, 3] {
+        let r = ScrollSmoothness::default().analyze(&scroll_over(rows(160, 8000), 100, 0, gain));
+        let g = f64::from(gain);
+        assert!(
+            (r.content_gain - g).abs() < 0.05,
+            "{gain}: {}",
+            r.content_gain
+        );
+        let tracking = r.tracking_ratio.unwrap();
+        assert!((tracking - g).abs() < 0.05, "{gain}: {tracking}");
+        assert_eq!(r.rejected_steps, 0, "{gain}");
+        assert_eq!(r.stalls, 0, "{gain}");
+        assert!(
+            r.relative_error.unwrap() < 0.02,
+            "{gain}: {:?}",
+            r.relative_error
+        );
+        assert!(
+            r.smoothness_score.unwrap() > 95.0,
+            "{gain}: {:?}",
+            r.smoothness_score
+        );
+    }
+}
+
+#[test]
+fn a_one_to_one_scroll_has_unit_gain() {
+    let r = ScrollSmoothness::default().analyze(&scroll_over(rows(160, 4000), 120, 0, 1));
+    assert_eq!(r.content_gain, 1.0);
+    assert!(
+        (r.tracking_ratio.unwrap() - 1.0).abs() < 0.02,
+        "{:?}",
+        r.tracking_ratio
+    );
+    assert!(
+        r.smoothness_score.unwrap() > 95.0,
+        "{:?}",
+        r.smoothness_score
+    );
 }

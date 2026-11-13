@@ -7,6 +7,7 @@ use fakeland_trace::stats::median;
 use fakeland_vision::{Axis, MotionEstimator, MotionRejection};
 
 use super::expected::{consumed_by, scroll_inputs};
+use super::gain::{self, Pair};
 use super::measure::displacement;
 use super::score::smoothness_score;
 use super::{FrameStep, ScrollReport};
@@ -95,18 +96,44 @@ impl Analyzer for ScrollSmoothness {
             |f: &CapturedFrame| tl.frame(f.commit).map(|r| r.committed).unwrap_or(f.time);
         let first_sent = inputs.first().map(|i| i.sent);
         let last_consumed = inputs.iter().filter_map(|i| i.committed).max();
+        // The displacement the input asks for between each pair of frames, and whether the pair
+        // falls inside the active scroll.
+        let plans: Vec<(f64, bool)> = frames
+            .windows(2)
+            .map(|pair| {
+                let (a, b) = (&pair[0], &pair[1]);
+                let expected = (consumed_by(&inputs, committed(b))
+                    - consumed_by(&inputs, committed(a)))
+                    * self.content_factor;
+                let tb = b.presented.unwrap_or(b.time);
+                let active = match (first_sent, last_consumed) {
+                    (Some(first), Some(last)) => tb > first && committed(a) < last,
+                    _ => false,
+                };
+                (expected, active)
+            })
+            .collect();
         let mut est = MotionEstimator::new();
+        let active_pairs: Vec<Pair<'_>> = frames
+            .windows(2)
+            .zip(&plans)
+            .filter(|(_, (_, active))| *active)
+            .map(|(pair, (expected, _))| Pair {
+                prev: &pair[0],
+                next: &pair[1],
+                expected: *expected,
+            })
+            .collect();
+        let gain = gain::estimate(&mut est, &active_pairs, self.axis);
         let mut steps = Vec::new();
         let mut rejections = BTreeMap::new();
         let mut previous: Option<f64> = None;
-        for pair in frames.windows(2) {
+        for (pair, &(expected, active)) in frames.windows(2).zip(&plans) {
             let (a, b) = (&pair[0], &pair[1]);
-            let expected = (consumed_by(&inputs, committed(b))
-                - consumed_by(&inputs, committed(a)))
-                * self.content_factor;
-            let hints = [expected, 0.0, previous.unwrap_or(expected)];
+            let target = expected * gain;
+            let hints = [target, 0.0, previous.unwrap_or(target)];
             let wide =
-                ((3.0 * expected.abs() / b.scale.max(1e-9)).ceil() as u32 + 16).min(self.max_shift);
+                ((3.0 * target.abs() / b.scale.max(1e-9)).ceil() as u32 + 16).min(self.max_shift);
             let measured = match displacement(&mut est, a, b, self.axis, &hints, wide) {
                 Ok(m) => {
                     previous = Some(m);
@@ -119,10 +146,6 @@ impl Analyzer for ScrollSmoothness {
             };
             let ta = a.presented.unwrap_or(a.time);
             let tb = b.presented.unwrap_or(b.time);
-            let active = match (first_sent, last_consumed) {
-                (Some(first), Some(last)) => tb > first && committed(a) < last,
-                _ => false,
-            };
             steps.push(FrameStep {
                 commit: b.commit,
                 presented: b.presented,
@@ -132,6 +155,7 @@ impl Analyzer for ScrollSmoothness {
                     _ => 0,
                 },
                 expected_px: expected,
+                target_px: target,
                 measured_px: measured,
                 active,
                 stalled: false,
@@ -139,7 +163,7 @@ impl Analyzer for ScrollSmoothness {
             });
         }
         self.classify(&mut steps);
-        let mut report = self.report(frames, &inputs, steps);
+        let mut report = self.report(frames, &inputs, steps, gain);
         report.rejections = rejections;
         report
     }
@@ -156,8 +180,8 @@ impl ScrollSmoothness {
         let typical = median(&moving);
         for s in steps.iter_mut().filter(|s| s.active) {
             let Some(m) = s.measured_px else { continue };
-            s.stalled = s.expected_px.abs() >= self.min_step_px
-                && m.abs() < self.stall_ratio * s.expected_px.abs();
+            s.stalled = s.target_px.abs() >= self.min_step_px
+                && m.abs() < self.stall_ratio * s.target_px.abs();
             s.double_step = typical.is_some_and(|t| m.abs() > self.double_step_ratio * t);
         }
     }
@@ -167,20 +191,21 @@ impl ScrollSmoothness {
         frames: &[CapturedFrame],
         inputs: &[super::ScrollInput],
         steps: Vec<FrameStep>,
+        gain: f64,
     ) -> ScrollReport {
         let active: Vec<&FrameStep> = steps.iter().filter(|s| s.active).collect();
         let measured: Vec<(&FrameStep, f64)> = active
             .iter()
             .filter_map(|s| Some((*s, s.measured_px?)))
             .collect();
-        let errors: Vec<f64> = measured.iter().map(|(s, m)| m - s.expected_px).collect();
-        let expected_sum: f64 = measured.iter().map(|(s, _)| s.expected_px.abs()).sum();
+        let errors: Vec<f64> = measured.iter().map(|(s, m)| m - s.target_px).collect();
+        let target_sum: f64 = measured.iter().map(|(s, _)| s.target_px.abs()).sum();
         let measured_total: f64 = measured.iter().map(|(_, m)| m).sum();
         let expected_measured: f64 = measured.iter().map(|(s, _)| s.expected_px).sum();
         let velocity_errors: Vec<f64> = measured
             .iter()
             .filter(|(s, _)| s.interval_ms > 0.0)
-            .map(|(s, m)| (m - s.expected_px).abs() / (s.interval_ms / 1000.0))
+            .map(|(s, m)| (m - s.target_px).abs() / (s.interval_ms / 1000.0))
             .collect();
         let velocities: Vec<f64> = measured
             .iter()
@@ -216,6 +241,7 @@ impl ScrollSmoothness {
             measured_total_px: measured_total,
             tracking_ratio: (expected_measured.abs() > f64::EPSILON)
                 .then(|| measured_total / expected_measured),
+            content_gain: gain,
             active_steps: active.len(),
             rejected_steps: active.iter().filter(|s| s.measured_px.is_none()).count(),
             missed_vblanks: missed,
@@ -223,8 +249,8 @@ impl ScrollSmoothness {
             stalls: missed + stalled as u64,
             double_steps: active.iter().filter(|s| s.double_step).count(),
             step_error_px: fakeland_trace::Summary::of(&errors),
-            relative_error: (expected_sum > f64::EPSILON)
-                .then(|| errors.iter().map(|e| e.abs()).sum::<f64>() / expected_sum),
+            relative_error: (target_sum > f64::EPSILON)
+                .then(|| errors.iter().map(|e| e.abs()).sum::<f64>() / target_sum),
             velocity_px_s: fakeland_trace::Summary::of(&velocities),
             velocity_error_px_s: (!velocity_errors.is_empty())
                 .then(|| velocity_errors.iter().sum::<f64>() / velocity_errors.len() as f64),

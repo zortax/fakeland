@@ -1,10 +1,11 @@
 //! Scroll smoothness: the content displacement of each presented frame, from motion estimation on
-//! frame captures, against the displacement the injected scroll events ask for. The report counts
-//! stalls and double steps and gives the velocity error, the scroll start latency and a
-//! smoothness score.
+//! frame captures, against the displacement the injected scroll events ask for times the content
+//! gain of the app. The report gives the gain, counts stalls and double steps and gives the
+//! velocity error, the scroll start latency and a smoothness score.
 
 mod analyzer;
 mod expected;
+mod gain;
 mod measure;
 mod report;
 mod score;
