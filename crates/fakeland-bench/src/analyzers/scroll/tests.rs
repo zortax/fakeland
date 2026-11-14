@@ -221,3 +221,187 @@ fn a_one_to_one_scroll_has_unit_gain() {
         r.smoothness_score
     );
 }
+
+/// `scroll` over `tall` on a client that shows every refresh, where `offset` maps the frame index
+/// and the scroll its commit consumed, in pixels, to the content offset of the frame.
+fn played(
+    tall: &fakeland_vision::Image,
+    events: u64,
+    offset: impl Fn(u64, i32) -> i32,
+) -> crate::input::AnalysisInput {
+    let mut s = Synth::new();
+    let mut sent = Vec::new();
+    for k in 0..events {
+        let t = crate::testing::at_ms(100.0 + k as f64 * 1000.0 / 120.0);
+        s.input(
+            t,
+            InputKind::PointerAxis,
+            Some((80.0, 100.0)),
+            "wheel dx=0 dy=10 v120=(0,80)",
+        );
+        sent.push(t);
+    }
+    let mut frames = Vec::new();
+    for seq in 1..=120u64 {
+        let commit_t = s.vblank(seq - 1) + Nanos::from_millis(5);
+        let consumed = sent.iter().filter(|t| **t <= commit_t).count() as i32 * 10;
+        let c = s.frame(commit_t, seq);
+        let img = tall
+            .crop(fakeland_types::Rect::new(
+                0,
+                offset(seq, consumed),
+                160,
+                200,
+            ))
+            .expect("crop");
+        frames.push(captured(img, c, s.vblank(seq), seq));
+    }
+    s.analysis().with_frames(vec![capture_of(frames)])
+}
+
+#[test]
+fn an_animated_scroll_does_not_stall() {
+    // The content follows the input through a filter: it starts slowly, lags, and comes to rest
+    // after the input ends. Its first and last frames move less than a pixel or not at all.
+    let tall = texture(160, 4000, 3);
+    let shown = std::cell::Cell::new(0.0f64);
+    let r = ScrollSmoothness::default().analyze(&played(&tall, 60, |_, consumed| {
+        shown.set(shown.get() + (f64::from(consumed) - shown.get()) * 0.12);
+        shown.get().round() as i32
+    }));
+    assert_eq!(r.stalled_frames, 0, "{:?}", stalled(&r));
+    assert_eq!(r.stalls, 0);
+    assert!(
+        r.relative_error.unwrap() > 0.2,
+        "the content lags the input"
+    );
+}
+
+#[test]
+fn a_repeated_frame_inside_a_scroll_stalls() {
+    // Frames 30 to 32 repeat frame 29 and frame 33 catches up.
+    let tall = texture(160, 4000, 3);
+    let held = std::cell::Cell::new(0);
+    let r = ScrollSmoothness::default().analyze(&played(&tall, 100, |seq, consumed| {
+        if !(30..=32).contains(&seq) {
+            held.set(consumed);
+        }
+        held.get()
+    }));
+    assert_eq!(r.stalled_frames, 3, "{:?}", stalled(&r));
+    assert_eq!(r.missed_vblanks, 0);
+    assert_eq!(r.stalls, 3);
+}
+
+#[test]
+fn the_rests_of_a_stepped_scroll_do_not_stall() {
+    // One event every tenth of a second, each shown at once: the frames between repeat the
+    // picture, and no input asks for more.
+    let tall = texture(160, 4000, 3);
+    let mut s = Synth::new();
+    let mut sent = Vec::new();
+    for k in 0..8u64 {
+        let t = crate::testing::at_ms(100.0 + k as f64 * 100.0);
+        s.input(
+            t,
+            InputKind::PointerAxis,
+            Some((80.0, 100.0)),
+            "wheel dx=0 dy=10 v120=(0,80)",
+        );
+        sent.push(t);
+    }
+    let mut frames = Vec::new();
+    for seq in 1..=120u64 {
+        let commit_t = s.vblank(seq - 1) + Nanos::from_millis(5);
+        let offset = sent.iter().filter(|t| **t <= commit_t).count() as i32 * 10;
+        let c = s.frame(commit_t, seq);
+        let img = tall
+            .crop(fakeland_types::Rect::new(0, offset, 160, 200))
+            .expect("crop");
+        frames.push(captured(img, c, s.vblank(seq), seq));
+    }
+    let r =
+        ScrollSmoothness::default().analyze(&s.analysis().with_frames(vec![capture_of(frames)]));
+    assert_eq!(r.stalled_frames, 0, "{:?}", stalled(&r));
+}
+
+#[test]
+fn a_compressed_list_is_followed_at_its_gain() {
+    // Thirteen content pixels per scroll pixel: 260 px per refresh over 32 px rows.
+    let tall = rows(160, 40_000);
+    let mut s = Synth::new();
+    let mut sent = Vec::new();
+    for k in 0..100u64 {
+        let t = crate::testing::at_ms(100.0 + k as f64 * 1000.0 / 120.0);
+        s.input(
+            t,
+            InputKind::PointerAxis,
+            Some((80.0, 100.0)),
+            "wheel dx=0 dy=10 v120=(0,80)",
+        );
+        sent.push(t);
+    }
+    let mut frames = Vec::new();
+    for seq in 1..=120u64 {
+        let commit_t = s.vblank(seq - 1) + Nanos::from_millis(5);
+        let offset = sent.iter().filter(|t| **t <= commit_t).count() as i32 * 130;
+        let c = s.frame(commit_t, seq);
+        let img = tall
+            .crop(fakeland_types::Rect::new(0, offset, 160, 600))
+            .expect("crop");
+        frames.push(captured(img, c, s.vblank(seq), seq));
+    }
+    let r =
+        ScrollSmoothness::default().analyze(&s.analysis().with_frames(vec![capture_of(frames)]));
+    assert!((r.content_gain - 13.0).abs() < 0.1, "{}", r.content_gain);
+    assert_eq!(r.stalled_frames, 0, "{:?}", stalled(&r));
+    assert_eq!(r.rejected_steps, 0, "{:?}", r.rejections);
+    assert!(r.relative_error.unwrap() < 0.02, "{:?}", r.relative_error);
+}
+
+#[test]
+fn a_step_past_the_view_is_rejected_not_stalled() {
+    // The content moves three frame heights per refresh: nothing of a frame is left in the next.
+    let tall = rows(160, 80_000);
+    let r = ScrollSmoothness {
+        content_factor: 30.0,
+        ..ScrollSmoothness::default()
+    }
+    .analyze(&played(&tall, 100, |_, consumed| consumed * 30));
+    assert_eq!(r.stalled_frames, 0, "{:?}", stalled(&r));
+    assert!(r.rejected_steps > 40, "{}", r.rejected_steps);
+    assert!(
+        r.rejections.contains_key("beyond_view"),
+        "{:?}",
+        r.rejections
+    );
+}
+
+/// The indexes of the stalled steps of a report.
+fn stalled(r: &ScrollReport) -> Vec<usize> {
+    (0..r.steps.len()).filter(|&i| r.steps[i].stalled).collect()
+}
+
+#[test]
+fn content_that_moves_in_whole_rows_is_followed() {
+    // The content moves 48 px per refresh on average but only shows whole 32 px rows, so its
+    // steps are one row or two: one period apart.
+    let tall = rows(160, 12_000);
+    let r = ScrollSmoothness::default().analyze(&played(&tall, 100, |_, consumed| {
+        (f64::from(consumed) * 2.4 / 32.0).round() as i32 * 32
+    }));
+    assert_eq!(r.rejected_steps, 0, "{:?}", r.rejections);
+    assert!(
+        (r.measured_total_px - 2400.0).abs() < 40.0,
+        "{}",
+        r.measured_total_px
+    );
+    let off_row = r
+        .steps
+        .iter()
+        .filter_map(|s| s.measured_px)
+        .filter(|m| (m / 32.0 - (m / 32.0).round()).abs() > 0.05)
+        .count();
+    assert_eq!(off_row, 0);
+    assert_eq!(r.stalled_frames, 0, "{:?}", stalled(&r));
+}

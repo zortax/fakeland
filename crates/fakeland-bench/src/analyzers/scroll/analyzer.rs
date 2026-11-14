@@ -27,8 +27,13 @@ pub struct ScrollSmoothness {
     pub max_shift: u32,
     /// Content pixels per scroll pixel of the app.
     pub content_factor: f64,
-    /// A step stalls when the content moves less than this fraction of the expected step.
-    pub stall_ratio: f64,
+    /// A frame that repeats the one before it stalls only when the content moves at least this
+    /// many logical pixels per step before and after it. Slower content rests on a pixel between
+    /// steps.
+    pub stall_motion_px: f64,
+    /// A pause of at most this many repeated frames stalls without scroll input, as inside an
+    /// animation of the app. A longer pause without input is a rest.
+    pub stall_pause: usize,
     /// A step is a double step when the content moves farther than this factor times the
     /// median step.
     pub double_step_ratio: f64,
@@ -43,7 +48,8 @@ impl Default for ScrollSmoothness {
             capture: None,
             max_shift: 256,
             content_factor: 1.0,
-            stall_ratio: 0.25,
+            stall_motion_px: 2.0,
+            stall_pause: 3,
             double_step_ratio: 1.75,
             min_step_px: 0.5,
         }
@@ -134,13 +140,14 @@ impl Analyzer for ScrollSmoothness {
             let hints = [target, 0.0, previous.unwrap_or(target)];
             let wide =
                 ((3.0 * target.abs() / b.scale.max(1e-9)).ceil() as u32 + 16).min(self.max_shift);
-            let measured = match displacement(&mut est, a, b, self.axis, &hints, wide) {
+            let changed = a.image.as_bytes() != b.image.as_bytes();
+            let measured = match self.step(&mut est, a, b, &hints, wide) {
                 Ok(m) => {
                     previous = Some(m);
                     Some(m)
                 }
                 Err(e) => {
-                    *rejections.entry(rejection_name(&e)).or_insert(0) += 1;
+                    *rejections.entry(e).or_insert(0) += 1;
                     None
                 }
             };
@@ -157,6 +164,7 @@ impl Analyzer for ScrollSmoothness {
                 expected_px: expected,
                 target_px: target,
                 measured_px: measured,
+                changed,
                 active,
                 stalled: false,
                 double_step: false,
@@ -170,6 +178,32 @@ impl Analyzer for ScrollSmoothness {
 }
 
 impl ScrollSmoothness {
+    /// Returns the content displacement of a step in logical pixels, or the name of the reason
+    /// it has none. A target step that leaves less than a third of the frame in both frames has
+    /// none: no search can tell it from a step one row period away.
+    fn step(
+        &self,
+        est: &mut MotionEstimator,
+        a: &CapturedFrame,
+        b: &CapturedFrame,
+        hints: &[f64],
+        wide: u32,
+    ) -> Result<f64, String> {
+        let len = match self.axis {
+            Axis::Vertical => a.image.height(),
+            Axis::Horizontal => a.image.width(),
+        };
+        let target = hints.first().copied().unwrap_or(0.0) / b.scale.max(1e-9);
+        if a.image.as_bytes() != b.image.as_bytes() && 3.0 * target.abs() > 2.0 * f64::from(len) {
+            return Err("beyond_view".into());
+        }
+        displacement(est, a, b, self.axis, hints, wide).map_err(|e| rejection_name(&e))
+    }
+
+    /// Marks the stalled frames and the double steps. A run of frames that repeat the frame
+    /// before them stalls when the content moves on both sides of it and the run is owed motion:
+    /// scroll input arrived for one of its frames, or it is short enough to be a hitch inside an
+    /// animation. Frames that move less than the input asks for do not stall.
     fn classify(&self, steps: &mut [FrameStep]) {
         let moving: Vec<f64> = steps
             .iter()
@@ -180,10 +214,41 @@ impl ScrollSmoothness {
         let typical = median(&moving);
         for s in steps.iter_mut().filter(|s| s.active) {
             let Some(m) = s.measured_px else { continue };
-            s.stalled = s.target_px.abs() >= self.min_step_px
-                && m.abs() < self.stall_ratio * s.target_px.abs();
             s.double_step = typical.is_some_and(|t| m.abs() > self.double_step_ratio * t);
         }
+        let mut i = 0;
+        while i < steps.len() {
+            if steps[i].changed {
+                i += 1;
+                continue;
+            }
+            let end = (i..steps.len())
+                .find(|&j| steps[j].changed)
+                .unwrap_or(steps.len());
+            let owed = end - i <= self.stall_pause
+                || steps[i..end]
+                    .iter()
+                    .any(|s| s.target_px.abs() >= self.min_step_px);
+            let under_way = self.moves(steps[..i].iter().rev()) && self.moves(steps[end..].iter());
+            if owed && under_way {
+                for s in &mut steps[i..end] {
+                    s.stalled = true;
+                }
+            }
+            i = end;
+        }
+    }
+
+    /// Returns whether the content moves at the stall speed over the next changed steps of
+    /// `steps`: the median of up to three of them. A changed step without a measured
+    /// displacement moves.
+    fn moves<'a>(&self, steps: impl Iterator<Item = &'a FrameStep>) -> bool {
+        let near: Vec<f64> = steps
+            .filter(|s| s.changed)
+            .take(3)
+            .map(|s| s.measured_px.map_or(f64::INFINITY, f64::abs))
+            .collect();
+        median(&near).is_some_and(|m| m >= self.stall_motion_px)
     }
 
     fn report(
@@ -218,7 +283,7 @@ impl ScrollSmoothness {
             per_refresh.push(*m);
         }
         let missed: u64 = active.iter().map(|s| s.vblanks_missed).sum();
-        let stalled = active.iter().filter(|s| s.stalled).count();
+        let stalled = steps.iter().filter(|s| s.stalled).count();
         let direction = inputs.iter().map(|i| i.amount).sum::<f64>().signum();
         let start_latency_ms = inputs.first().and_then(|first| {
             let moved = steps.iter().find(|s| {

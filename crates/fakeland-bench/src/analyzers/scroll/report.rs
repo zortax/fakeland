@@ -29,9 +29,13 @@ pub struct FrameStep {
     /// The content displacement in logical pixels; `None` when motion estimation rejected the
     /// pair.
     pub measured_px: Option<f64>,
+    /// The later frame differs from the earlier one in the captured region.
+    #[serde(default = "yes")]
+    pub changed: bool,
     /// The step falls inside the active scroll.
     pub active: bool,
-    /// The content stood still while the input moved.
+    /// The later frame repeats the earlier one while the scroll is under way: the content moves
+    /// before and after it, and scroll input arrived for it or the pause is short.
     pub stalled: bool,
     /// The content moved much farther than a median step.
     pub double_step: bool,
@@ -62,7 +66,8 @@ pub struct ScrollReport {
     pub rejected_steps: usize,
     /// Refreshes inside the active scroll that showed an old frame.
     pub missed_vblanks: u64,
-    /// Presented frames whose content stood still while the input moved.
+    /// Presented frames that repeat the frame before them while the scroll is under way. A frame
+    /// that moves less than the input asks for, as in an animated scroll, is not one.
     pub stalled_frames: usize,
     /// Missed vblanks plus stalled frames.
     pub stalls: u64,
@@ -116,6 +121,11 @@ impl Metrics for ScrollReport {
     fn samples(&self) -> Option<usize> {
         Some(self.active_steps.saturating_sub(self.rejected_steps))
     }
+}
+
+/// The `changed` of a step without one.
+fn yes() -> bool {
+    true
 }
 
 /// The content gain of a report without one.

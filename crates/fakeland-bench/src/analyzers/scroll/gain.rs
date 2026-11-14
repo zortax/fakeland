@@ -9,15 +9,15 @@
 
 use fakeland::CapturedFrame;
 use fakeland_trace::stats::median;
-use fakeland_vision::{Axis, Image, MotionEstimator};
+use fakeland_vision::{Axis, MotionEstimator};
 
-use super::measure::near;
+use super::measure::{mismatch, near};
 
 /// The most steps that the estimate reads.
 const SAMPLES: usize = 16;
 /// The candidate gains, in steps of `GAIN_STEP` up to `MAX_GAIN`.
 const GAIN_STEP: f64 = 0.25;
-const MAX_GAIN: f64 = 6.0;
+const MAX_GAIN: f64 = 16.0;
 /// Expected steps below this many logical pixels give no sample.
 const MIN_STEP_PX: f64 = 2.0;
 /// A gain this close to 1 counts as 1.
@@ -86,49 +86,4 @@ pub fn estimate(est: &mut MotionEstimator, pairs: &[Pair<'_>], axis: Axis) -> f6
     } else {
         gain.min(MAX_GAIN)
     }
-}
-
-/// Returns the mean absolute color difference between `next` and `prev` moved by `shift` capture
-/// pixels along the axis (content moves by `-shift`, so `prev` at `shift` lines up with `next` at
-/// 0), over their overlap. Every second line and pixel counts. Returns `None` when the overlap is
-/// less than a third of the frame or the frames differ in size.
-fn mismatch(prev: &Image, next: &Image, axis: Axis, shift: i64) -> Option<f64> {
-    if prev.width() != next.width() || prev.height() != next.height() {
-        return None;
-    }
-    let (w, h) = (i64::from(prev.width()), i64::from(prev.height()));
-    let len = match axis {
-        Axis::Vertical => h,
-        Axis::Horizontal => w,
-    };
-    if 3 * (len - shift.abs()) < len {
-        return None;
-    }
-    let (a, b) = (prev.as_bytes(), next.as_bytes());
-    let (sa, sb) = (prev.stride(), next.stride());
-    let (dx, dy) = match axis {
-        Axis::Vertical => (0, shift),
-        Axis::Horizontal => (shift, 0),
-    };
-    let mut sum = 0u64;
-    let mut count = 0u64;
-    for y in (0..h).step_by(2) {
-        let ya = y + dy;
-        if !(0..h).contains(&ya) {
-            continue;
-        }
-        for x in (0..w).step_by(2) {
-            let xa = x + dx;
-            if !(0..w).contains(&xa) {
-                continue;
-            }
-            let pa = ya as usize * sa + xa as usize * 4;
-            let pb = y as usize * sb + x as usize * 4;
-            for c in 0..3 {
-                sum += u64::from(a[pa + c].abs_diff(b[pb + c]));
-            }
-            count += 3;
-        }
-    }
-    (count > 0).then(|| sum as f64 / count as f64)
 }
