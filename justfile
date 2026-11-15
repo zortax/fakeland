@@ -34,6 +34,11 @@ viewer *cmd:
 build:
     cargo build -p fakeland-cli -p fakeland-mcp -p fakeland-testclient
 
+# Install the fakeland and fakeland-mcp binaries into ~/.cargo/bin, for example `just install --features viewer,nvml`.
+install *args:
+    cargo install --locked --path crates/fakeland-cli {{args}}
+    cargo install --locked --path crates/fakeland-mcp {{args}}
+
 # Serve a session with a control socket until Ctrl-C, for example `just serve -- alacritty`.
 serve *args:
     cargo run -q -p fakeland-cli -- serve {{args}}
