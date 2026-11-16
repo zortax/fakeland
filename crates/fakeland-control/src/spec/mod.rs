@@ -3,11 +3,13 @@
 //! share these forms.
 
 mod error;
+mod output;
 mod parse;
 mod session;
 mod window;
 
 pub use error::SpecError;
+pub use output::new_output;
 pub use parse::{
     parse_callbacks, parse_composite, parse_output, parse_renderer, parse_size, parse_timing,
     parse_window_policy,

@@ -86,8 +86,8 @@ impl Dispatch<WlPointer, ()> for App {
                         "y": app.pointer.1,
                     }),
                 );
-                if pressed && app.args.unlock_on_input {
-                    app.unlock();
+                if pressed {
+                    app.lock_input(qh);
                 }
                 let on_parent =
                     matches!(app.pointer_surface.as_deref(), Some("layer" | "toplevel"));
@@ -111,7 +111,7 @@ impl Dispatch<WlKeyboard, ()> for App {
         event: wl_keyboard::Event,
         _: &(),
         _: &Connection,
-        _: &QueueHandle<Self>,
+        qh: &QueueHandle<Self>,
     ) {
         match event {
             wl_keyboard::Event::Enter { surface, .. } => log::event(
@@ -129,8 +129,8 @@ impl Dispatch<WlKeyboard, ()> for App {
             } => {
                 let pressed = state == KeyState::Pressed;
                 log::event("key", json!({ "key": key, "pressed": pressed }));
-                if pressed && app.args.unlock_on_input {
-                    app.unlock();
+                if pressed {
+                    app.lock_input(qh);
                 }
             }
             _ => {}

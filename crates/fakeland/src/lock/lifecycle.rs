@@ -18,7 +18,8 @@ use crate::layers::Hit;
 use crate::server::{ClientState, State};
 
 impl State {
-    /// Registers a lock surface and sizes it to its output.
+    /// Sizes a lock surface to its output and registers it when the holder created it. The lock
+    /// surfaces of other lock objects stay hidden and receive no input.
     pub fn lock_surface_created(&mut self, surface: LockSurface, output: WlOutput) {
         let wl = surface.wl_surface().clone();
         let Some(sid) = self.surfaces.id_of(&wl) else {
@@ -35,6 +36,9 @@ impl State {
         surface.with_pending_state(|s| {
             s.size = Some((rect.w.max(1) as u32, rect.h.max(1) as u32).into());
         });
+        if !self.lock.holder_sent() {
+            return;
+        }
         out.output.enter(&wl);
         let pid = wl
             .client()

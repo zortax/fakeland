@@ -5,5 +5,6 @@ mod common;
 mod input;
 mod measure;
 mod media;
+mod outputs;
 mod screen;
 mod session;

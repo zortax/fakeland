@@ -4,7 +4,7 @@ use anyhow::{Result, bail};
 use fakeland_control::ControlClient;
 
 use super::args::CtlArgs;
-use super::{a11y, bench, input, media, session, trace};
+use super::{a11y, bench, input, media, outputs, session, trace};
 
 /// Runs `fakeland ctl` and returns the process exit code.
 pub fn run(args: CtlArgs) -> Result<i32> {
@@ -14,6 +14,7 @@ pub fn run(args: CtlArgs) -> Result<i32> {
     };
     for group in [
         session::run,
+        outputs::run,
         input::run,
         trace::run,
         bench::run,

@@ -2,8 +2,7 @@
 //! without unlocking keeps the session locked and yields to the next lock request. A forced
 //! unlock ends the lock from the session side.
 
-use fakeland_types::{Nanos, WindowId};
-use smithay::reexports::wayland_server::Resource;
+use fakeland_types::WindowId;
 use smithay::wayland::session_lock::SessionLocker;
 
 use crate::server::State;
@@ -19,6 +18,7 @@ impl State {
                 return;
             }
             self.forget_lock_surfaces();
+            self.reset_locked_outputs();
         }
         self.end_popup_grabs();
         self.lock.locked = true;
@@ -28,35 +28,23 @@ impl State {
         self.space_dirty = true;
     }
 
-    /// Handles `unlock_and_destroy`. The request may come from a lock object that holds no lock:
-    /// a refused one, or the stale one of a forced unlock. The sender dies with the request, so
-    /// the decision waits until the dispatch ends.
+    /// Handles `unlock_and_destroy`. The session unlocks when the sender holds the lock. A
+    /// refused lock object and the lock object of a forced unlock leave the session as it is.
     pub fn unlock_requested(&mut self) {
-        self.schedule_in(Nanos::ZERO, State::settle_unlock);
-    }
-
-    /// Unlocks the session when the lock object that holds it is gone. A stale lock object that
-    /// died sent the request, and the session stays locked.
-    fn settle_unlock(&mut self) {
-        if self.lock.stale.as_ref().is_some_and(|s| !s.is_alive()) {
-            self.lock.stale = None;
-            return;
-        }
-        let holder_gone = self.lock.object.as_ref().is_none_or(|o| !o.is_alive());
-        if self.lock.locked && holder_gone {
+        if self.lock.holder_sent() {
             self.unlock_session();
         }
     }
 
-    /// Unlocks the session without the lock client. The client keeps its lock object, and its
-    /// later unlock request leaves a newer lock in place. Returns false when the session is not
-    /// locked.
+    /// Unlocks the session without the lock client. Returns false when the session is not
+    /// locked. The client keeps its lock object and sees the session locked. Its later unlock
+    /// request leaves a newer lock in place, and its next lock may cover the same outputs.
     pub fn force_unlock(&mut self) -> bool {
         if !self.lock.locked {
             return false;
         }
-        self.lock.stale = self.lock.object.take().filter(|o| o.is_alive());
         self.unlock_session();
+        self.reset_locked_outputs();
         true
     }
 

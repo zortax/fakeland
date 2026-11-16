@@ -1,11 +1,11 @@
-//! Session, app, output, window and clipboard commands of ctl.
+//! Session, app, window and clipboard commands of ctl.
 
 use anyhow::{Context, Result, anyhow, bail};
-use fakeland::{LaunchSpec, OutputChange, WindowOp};
+use fakeland::{LaunchSpec, WindowOp};
 use fakeland_control::ControlClient;
 use fakeland_control::methods::*;
-use fakeland_control::spec::{parse_output, parse_size, parse_timing, parse_window_ref};
-use fakeland_control::text::{outputs_text, windows_text};
+use fakeland_control::spec::{parse_size, parse_window_ref};
+use fakeland_control::text::windows_text;
 use fakeland_scenario::{CaptureTarget, Roi};
 use fakeland_types::{Logical, OutputId, ProcessId, Rect, Size};
 
@@ -87,49 +87,6 @@ fn shot_target(
     })
 }
 
-async fn output_changes(
-    c: &ControlClient,
-    output: Option<OutputId>,
-    mode: Option<&str>,
-    scale: Option<f64>,
-    timing: Option<&str>,
-    power: Option<bool>,
-) -> Result<Vec<OutputChange>> {
-    let mut changes = Vec::new();
-    let mut refresh = None;
-    if let Some(m) = mode {
-        let (_, mode) = parse_output(m)?;
-        refresh = Some(mode.refresh);
-        changes.push(OutputChange::Mode(mode));
-    }
-    if let Some(s) = scale {
-        changes.push(OutputChange::Scale { scale: s });
-    }
-    if let Some(t) = timing {
-        let refresh = match refresh {
-            Some(r) => r,
-            None => {
-                let outputs = c.call::<Outputs>(NoParams {}).await?;
-                outputs
-                    .iter()
-                    .find(|o| output.is_none_or(|id| o.id == id))
-                    .map(|o| o.mode.refresh)
-                    .context("no such output")?
-            }
-        };
-        changes.push(OutputChange::Timing(parse_timing(t, refresh)?));
-    }
-    match power {
-        Some(true) => changes.push(OutputChange::Enable),
-        Some(false) => changes.push(OutputChange::Disable),
-        None => {}
-    }
-    if changes.is_empty() {
-        bail!("name a change: --mode, --scale, --timing, --enable or --disable");
-    }
-    Ok(changes)
-}
-
 /// Runs a session command. Returns `None` for commands of other groups.
 pub fn run(c: &ControlClient, json: bool, cmd: &CtlCommand) -> Result<Option<i32>> {
     match cmd {
@@ -147,9 +104,6 @@ pub fn run(c: &ControlClient, json: bool, cmd: &CtlCommand) -> Result<Option<i32
         })?,
         CtlCommand::Windows => emit(json, &c.blocking_call::<Windows>(NoParams {})?, |w| {
             windows_text(w)
-        })?,
-        CtlCommand::Outputs => emit(json, &c.blocking_call::<Outputs>(NoParams {})?, |o| {
-            outputs_text(o)
         })?,
         CtlCommand::ForceUnlock => emit(
             json,
@@ -259,36 +213,6 @@ pub fn run(c: &ControlClient, json: bool, cmd: &CtlCommand) -> Result<Option<i32
                 output: output.map(OutputId),
                 n: *n,
             })?;
-        }
-        CtlCommand::SetOutput {
-            output,
-            mode,
-            scale,
-            timing,
-            enable,
-            disable,
-        } => {
-            let output = output.map(OutputId);
-            let power = match (enable, disable) {
-                (true, _) => Some(true),
-                (_, true) => Some(false),
-                _ => None,
-            };
-            let changes = fakeland::block_on(output_changes(
-                c,
-                output,
-                mode.as_deref(),
-                *scale,
-                timing.as_deref(),
-                power,
-            ))?;
-            let mut last = None;
-            for change in changes {
-                last = Some(c.blocking_call::<SetOutput>(SetOutputParams { output, change })?);
-            }
-            if let Some(state) = last {
-                emit(json, &state, |s| outputs_text(std::slice::from_ref(s)))?;
-            }
         }
         CtlCommand::Window { op, arg, window } => {
             c.blocking_call::<WindowOperation>(WindowOpParams {

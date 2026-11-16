@@ -10,8 +10,8 @@ use std::path::PathBuf;
 use fakeland::{App, Fakeland, LaunchSpec, OutputConfig, Session, WindowRef};
 use fakeland_types::{Hz, Nanos, Size};
 use support::shell::{
-    click, count_events, is, layer, pixel_at, poll, session, toplevel, wait_event, wait_info,
-    wait_layer, wait_pixel,
+    click, count_events, is, layer, pixel_at, poll, session, toplevel, wait_count, wait_event,
+    wait_info, wait_layer, wait_pixel,
 };
 
 /// Launches a red bar along the top edge whose popup grabs the seat.
@@ -37,14 +37,6 @@ fn grabbing_bar(s: &Session) -> App {
         .expect("launch bar");
     wait_layer(s, &bar, "bar");
     bar
-}
-
-/// Waits until a client logged an event a number of times.
-fn wait_count(app: &App, event: &str, n: usize) {
-    poll(
-        || format!("fewer than {n} {event} events: {}", app.stdout()),
-        || (count_events(app, |e| is(e, event)) >= n).then_some(()),
-    );
 }
 
 /// Returns the count of button presses of a client.

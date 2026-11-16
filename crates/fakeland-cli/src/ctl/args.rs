@@ -30,7 +30,7 @@ pub enum CtlCommand {
     Info,
     /// List windows.
     Windows,
-    /// List outputs.
+    /// List outputs and unplugged outputs.
     Outputs,
     /// List launched apps.
     Apps,
@@ -253,25 +253,19 @@ pub enum CtlCommand {
         output: Option<u32>,
     },
     /// Change an output.
-    SetOutput {
-        /// The output id. The default is the primary output.
-        #[arg(long, value_name = "ID")]
-        output: Option<u32>,
-        /// A new mode as WIDTHxHEIGHT, with an optional @HZ refresh.
-        #[arg(long, value_name = "MODE")]
-        mode: Option<String>,
-        /// A new scale.
-        #[arg(long)]
-        scale: Option<f64>,
-        /// A new timing model.
-        #[arg(long, value_name = "MODEL")]
-        timing: Option<String>,
-        /// Power the output on.
-        #[arg(long)]
-        enable: bool,
-        /// Power the output off.
-        #[arg(long, conflicts_with = "enable")]
-        disable: bool,
+    SetOutput(super::outputs::SetOutputArgs),
+    /// Plug in a new output.
+    AddOutput(super::outputs::AddOutputArgs),
+    /// Unplug an output: its wl_output global goes away, its layer surfaces close and its windows
+    /// move to the primary output. The session keeps its config for replug-output.
+    RemoveOutput {
+        /// The output id.
+        output: u32,
+    },
+    /// Plug an unplugged output in again with its name, identity, mode, scale and position.
+    ReplugOutput {
+        /// The connector name. The default is the latest unplugged output.
+        name: Option<String>,
     },
     /// Run a window operation: focus, maximize, fullscreen, close, suspend, resume,
     /// resize WxH, float X,Y,W,H or output ID.

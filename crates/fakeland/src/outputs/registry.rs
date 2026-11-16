@@ -1,4 +1,5 @@
-//! The set of faked outputs in configuration order.
+//! The set of faked outputs in configuration order, and the configs of unplugged outputs that
+//! can come back.
 
 use std::collections::BTreeMap;
 
@@ -13,6 +14,7 @@ use crate::config::{OutputConfig, OutputPosition};
 pub struct Outputs {
     list: BTreeMap<OutputId, FakeOutput>,
     order: Vec<OutputId>,
+    unplugged: Vec<OutputConfig>,
 }
 
 impl Outputs {
@@ -95,5 +97,29 @@ impl Outputs {
             .max()
             .unwrap_or(0);
         OutputPosition { x, y: 0 }
+    }
+
+    /// Keeps the config of an unplugged output. It replaces an older config of the same name.
+    pub fn park(&mut self, config: OutputConfig) {
+        self.unplugged.retain(|c| c.name != config.name);
+        self.unplugged.push(config);
+    }
+
+    /// Returns the config of an unplugged output by name, or the latest one for `None`.
+    pub fn parked(&self, name: Option<&str>) -> Option<&OutputConfig> {
+        match name {
+            Some(name) => self.unplugged.iter().find(|c| c.name == name),
+            None => self.unplugged.last(),
+        }
+    }
+
+    /// Drops the config of an unplugged output.
+    pub fn unpark(&mut self, name: &str) {
+        self.unplugged.retain(|c| c.name != name);
+    }
+
+    /// Returns the configs of the unplugged outputs, the latest last.
+    pub fn unplugged(&self) -> &[OutputConfig] {
+        &self.unplugged
     }
 }

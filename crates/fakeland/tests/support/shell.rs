@@ -8,7 +8,7 @@ use fakeland::{
     WindowRef,
 };
 use fakeland_scenario::{Button, Position};
-use fakeland_types::{Hz, Nanos};
+use fakeland_types::{Hz, Nanos, OutputId};
 use serde_json::Value;
 
 /// Starts a session with one output of a size.
@@ -86,6 +86,20 @@ pub fn count_events(app: &App, f: impl Fn(&Value) -> bool) -> usize {
     events(app).iter().filter(|e| f(e)).count()
 }
 
+/// Waits until a client logged an event a number of times.
+pub fn wait_count(app: &App, event: &str, n: usize) {
+    poll(
+        || {
+            format!(
+                "fewer than {n} {event} events: {}\n{}",
+                app.stdout(),
+                app.stderr()
+            )
+        },
+        || (count_events(app, |e| is(e, event)) >= n).then_some(()),
+    );
+}
+
 /// Waits until a window matches a condition.
 pub fn wait_info(session: &Session, id: WindowRef, f: impl Fn(&WindowInfo) -> bool) -> WindowInfo {
     poll(
@@ -99,11 +113,17 @@ pub fn wait_info(session: &Session, id: WindowRef, f: impl Fn(&WindowInfo) -> bo
     )
 }
 
-/// Returns the color of a pixel of a screenshot without the cursor.
+/// Returns the color of a pixel of a screenshot of the primary output without the cursor.
 pub fn pixel_at(session: &Session, x: u32, y: u32) -> [u8; 3] {
+    pixel_on(session, None, x, y)
+}
+
+/// Returns the color of a pixel of a screenshot of an output without the cursor. `None` selects
+/// the primary output.
+pub fn pixel_on(session: &Session, output: Option<OutputId>, x: u32, y: u32) -> [u8; 3] {
     let shot = session
         .blocking_screenshot(
-            CaptureTarget::default(),
+            CaptureTarget::Output { output },
             CaptureOptions {
                 include_cursor: false,
                 ..CaptureOptions::default()
@@ -114,16 +134,21 @@ pub fn pixel_at(session: &Session, x: u32, y: u32) -> [u8; 3] {
     [px[0], px[1], px[2]]
 }
 
-/// Waits until a pixel shows a color.
+/// Waits until a pixel of the primary output shows a color.
 pub fn wait_pixel(session: &Session, x: u32, y: u32, color: [u8; 3]) {
+    wait_pixel_on(session, None, x, y, color);
+}
+
+/// Waits until a pixel of an output shows a color.
+pub fn wait_pixel_on(session: &Session, output: Option<OutputId>, x: u32, y: u32, color: [u8; 3]) {
     poll(
         || {
             format!(
-                "pixel {x},{y} is {:?}, expected {color:?}",
-                pixel_at(session, x, y)
+                "pixel {x},{y} of {output:?} is {:?}, expected {color:?}",
+                pixel_on(session, output, x, y)
             )
         },
-        || (pixel_at(session, x, y) == color).then_some(()),
+        || (pixel_on(session, output, x, y) == color).then_some(()),
     );
 }
 

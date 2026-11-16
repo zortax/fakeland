@@ -1,14 +1,13 @@
 //! The client state: the bound globals, the layer surface or toplevel with its popup or the
 //! session lock with its lock surfaces, and the pointer position.
 
-use wayland_client::globals::{GlobalList, GlobalListContents, registry_queue_init};
+use wayland_client::globals::registry_queue_init;
 use wayland_client::protocol::wl_compositor::WlCompositor;
 use wayland_client::protocol::wl_output::WlOutput;
-use wayland_client::protocol::wl_registry::WlRegistry;
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::protocol::wl_shm::WlShm;
 use wayland_client::protocol::wl_surface::WlSurface;
-use wayland_client::{Connection, Dispatch, Proxy, QueueHandle};
+use wayland_client::{Connection, Proxy, QueueHandle};
 use wayland_protocols::ext::session_lock::v1::client::ext_session_lock_manager_v1::ExtSessionLockManagerV1;
 use wayland_protocols::ext::session_lock::v1::client::ext_session_lock_surface_v1::ExtSessionLockSurfaceV1;
 use wayland_protocols::ext::session_lock::v1::client::ext_session_lock_v1::ExtSessionLockV1;
@@ -20,6 +19,7 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_shell_v1::ZwlrLay
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::ZwlrLayerSurfaceV1;
 
 use crate::args::{Args, ColorArg};
+use crate::outputs::bind_outputs;
 use crate::shm::{ShmError, solid_buffer};
 
 /// A startup failure.
@@ -85,7 +85,7 @@ pub struct App {
     pub layer_shell: Option<ZwlrLayerShellV1>,
     /// `ext_session_lock_manager_v1`.
     pub lock_manager: Option<ExtSessionLockManagerV1>,
-    /// Every output in registry order.
+    /// Every output in registry order. The user data is the global name.
     pub outputs: Vec<WlOutput>,
     /// The layer surface.
     pub layer: Option<(WlSurface, ZwlrLayerSurfaceV1)>,
@@ -101,6 +101,10 @@ pub struct App {
     pub pointer: (f64, f64),
     /// The entered surface.
     pub pointer_surface: Option<String>,
+    /// The client unlocked and locked again.
+    pub relocked: bool,
+    /// The lock timers run.
+    pub timers_started: bool,
     /// The client is done.
     pub done: bool,
 }
@@ -133,6 +137,8 @@ impl App {
             lock_surfaces: Vec::new(),
             pointer: (0.0, 0.0),
             pointer_surface: None,
+            relocked: false,
+            timers_started: false,
             done: false,
         };
         queue.roundtrip(&mut app)?;
@@ -177,27 +183,5 @@ impl App {
         surface.damage_buffer(0, 0, width as i32, height as i32);
         surface.commit();
         Ok(())
-    }
-}
-
-fn bind_outputs(globals: &GlobalList, qh: &QueueHandle<App>) -> Vec<WlOutput> {
-    let registry = globals.registry();
-    globals.contents().with_list(|list| {
-        list.iter()
-            .filter(|g| g.interface == WlOutput::interface().name)
-            .map(|g| registry.bind::<WlOutput, _, App>(g.name, g.version.min(4), qh, ()))
-            .collect()
-    })
-}
-
-impl Dispatch<WlRegistry, GlobalListContents> for App {
-    fn event(
-        _: &mut Self,
-        _: &WlRegistry,
-        _: wayland_client::protocol::wl_registry::Event,
-        _: &GlobalListContents,
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
     }
 }

@@ -168,6 +168,8 @@ fn drives_the_reference_client_over_stdio() {
         "wait_for",
         "logs",
         "set_output",
+        "add_output",
+        "remove_output",
         "clipboard_get",
         "clipboard_set",
         "run_scenario",
@@ -288,6 +290,32 @@ fn drives_the_reference_client_over_stdio() {
     assert!(!is_error(&r));
     let r = c.call("clipboard_get", json!({}));
     assert_eq!(texts(&r)[0], "hello");
+
+    let r = c.call("add_output", json!({"spec": "800x600@60", "scale": 2.0}));
+    assert!(!is_error(&r), "{r}");
+    assert!(
+        texts(&r)[0].starts_with("Plugged in DP-2 as output 2."),
+        "{r}"
+    );
+    assert!(texts(&r)[0].contains("DP-2 800x600@60.000Hz scale 2 logical 400x300 at 1280,0"));
+    let r = c.call("remove_output", json!({"output": 2}));
+    assert!(!is_error(&r), "{r}");
+    assert!(texts(&r)[0].contains("unplugged DP-2 800x600@60.000Hz scale 2 at 1280,0"));
+    let r = c.call("add_output", json!({}));
+    assert!(!is_error(&r), "{r}");
+    assert!(
+        texts(&r)[0].starts_with("Plugged in DP-2 as output 3."),
+        "{r}"
+    );
+    assert!(!texts(&r)[0].contains("unplugged"), "{r}");
+    let r = c.call("add_output", json!({}));
+    assert!(is_error(&r), "{r}");
+    let r = c.call("remove_output", json!({"output": 1}));
+    assert!(!is_error(&r), "{r}");
+    let r = c.call("remove_output", json!({"output": 3}));
+    assert!(is_error(&r), "the last output stays: {r}");
+    let r = c.call("add_output", json!({"name": "DP-1"}));
+    assert!(!is_error(&r), "{r}");
 
     let r = c.call("logs", json!({}));
     assert!(texts(&r)[0].contains("running"));

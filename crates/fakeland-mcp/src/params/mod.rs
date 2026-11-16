@@ -6,6 +6,7 @@ mod defaults;
 mod input;
 mod measure;
 mod media;
+mod outputs;
 mod screen;
 mod session;
 
@@ -18,8 +19,9 @@ pub use measure::{
     RunScenarioParams, TraceStartParams, TraceStopParams,
 };
 pub use media::{RecordStartParams, RecordStopParams};
+pub use outputs::{AddOutputParams, RemoveOutputParams, SetOutputParams};
 pub use screen::{Region, ScreenshotParams, WaitForParams, WaitKind};
 pub use session::{
     ClipboardSetParams, KillAppParams, LaunchParams, LogsParams, NoArgs, RestartAppParams,
-    SessionStartParams, SetOutputParams, WindowParams,
+    SessionStartParams, WindowParams,
 };

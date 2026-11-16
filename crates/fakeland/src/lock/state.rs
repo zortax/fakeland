@@ -1,10 +1,12 @@
-//! The lock state, the lock object that holds the session, and the lock surface registry.
+//! The lock state, the lock object that holds the session, the lock manager state of other lock
+//! objects, and the lock surface registry.
 
 use fakeland_types::{OutputId, ProcessId, SurfaceId, Timestamp, WindowId};
 use smithay::backend::renderer::element::Id;
 use smithay::reexports::wayland_protocols::ext::session_lock::v1::server::ext_session_lock_v1::ExtSessionLockV1;
 use smithay::reexports::wayland_server::Resource;
-use smithay::wayland::session_lock::LockSurface;
+use smithay::reexports::wayland_server::protocol::wl_output::WlOutput;
+use smithay::wayland::session_lock::{LockSurface, SessionLockManagerState};
 
 /// One lock surface.
 #[derive(Debug, Clone)]
@@ -32,9 +34,12 @@ pub struct SessionLock {
     pub locked: bool,
     /// The lock object that holds the session while it is locked.
     pub object: Option<ExtSessionLockV1>,
-    /// The lock object of a forced unlock. Its client still sees the session locked, and its
-    /// unlock request leaves a newer lock in place.
-    pub stale: Option<ExtSessionLockV1>,
+    /// The lock object whose request is in dispatch.
+    pub sender: Option<ExtSessionLockV1>,
+    /// The lock manager state of the requests of lock objects other than the holder.
+    pub scratch: Option<SessionLockManagerState>,
+    /// The outputs of the lock surfaces in `scratch`.
+    pub scratch_outputs: Vec<WlOutput>,
     /// The lock surfaces in creation order.
     pub surfaces: Vec<LockRecord>,
     /// The lock surface that a press focused.
@@ -48,7 +53,9 @@ impl Default for SessionLock {
         Self {
             locked: false,
             object: None,
-            stale: None,
+            sender: None,
+            scratch: None,
+            scratch_outputs: Vec::new(),
             surfaces: Vec::new(),
             focus: None,
             backdrop: Id::new(),
@@ -67,11 +74,15 @@ impl SessionLock {
         self.surfaces.iter().find(|s| s.sid == sid).map(|s| s.id)
     }
 
-    /// Returns true while a live client holds the lock: the lock object or a lock surface is
-    /// alive.
+    /// Returns true while a live client holds the lock. The lock object dies with its client,
+    /// and an unlock of the holder ends the lock at once.
     pub fn held(&self) -> bool {
         self.object.as_ref().is_some_and(|o| o.is_alive())
-            || self.surfaces.iter().any(|s| s.surface.alive())
+    }
+
+    /// Returns true when the holder sent the request in dispatch.
+    pub fn holder_sent(&self) -> bool {
+        self.locked && self.sender.is_some() && self.sender == self.object
     }
 
     /// Removes a lock surface.

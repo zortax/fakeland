@@ -63,7 +63,8 @@ impl Session {
         block_on(self.add_output(config))
     }
 
-    /// Unplugs an output. Its windows move to the primary output.
+    /// Unplugs an output and removes its `wl_output` global. Its windows move to the primary
+    /// output. The session keeps its config for [`Session::replug_output`].
     pub async fn remove_output(&self, output: OutputId) -> Result<(), SessionError> {
         Ok(self
             .inner
@@ -74,5 +75,31 @@ impl Session {
     /// Unplugs an output on the calling thread.
     pub fn blocking_remove_output(&self, output: OutputId) -> Result<(), SessionError> {
         block_on(self.remove_output(output))
+    }
+
+    /// Plugs an unplugged output in again with its config. `None` selects the latest unplugged
+    /// output.
+    pub async fn replug_output(&self, name: Option<String>) -> Result<OutputId, SessionError> {
+        Ok(self
+            .inner
+            .call(move |state| state.replug_output(name.as_deref()))
+            .await??)
+    }
+
+    /// Plugs an unplugged output in again on the calling thread.
+    pub fn blocking_replug_output(&self, name: Option<String>) -> Result<OutputId, SessionError> {
+        block_on(self.replug_output(name))
+    }
+
+    /// Returns the configs of the unplugged outputs, the latest last.
+    pub async fn unplugged_outputs(&self) -> Result<Vec<OutputConfig>, SessionError> {
+        self.inner
+            .call(|state| state.outputs.unplugged().to_vec())
+            .await
+    }
+
+    /// Returns the configs of the unplugged outputs on the calling thread.
+    pub fn blocking_unplugged_outputs(&self) -> Result<Vec<OutputConfig>, SessionError> {
+        block_on(self.unplugged_outputs())
     }
 }

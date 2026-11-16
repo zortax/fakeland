@@ -2,7 +2,7 @@
 
 use std::fmt::Write;
 
-use fakeland::{OutputState, WindowInfo, WindowKind};
+use fakeland::{OutputConfig, OutputState, WindowInfo, WindowKind};
 
 /// Renders one line per window: id, app id and title or layer state, geometry, output and state.
 pub fn windows_text(windows: &[WindowInfo]) -> String {
@@ -83,6 +83,22 @@ pub fn outputs_text(outputs: &[OutputState]) -> String {
             o.position.x,
             o.position.y,
             if o.enabled { "" } else { " (off)" }
+        );
+    }
+    out
+}
+
+/// Renders one line per unplugged output: name, mode, scale and position.
+pub fn unplugged_text(outputs: &[OutputConfig]) -> String {
+    let mut out = String::new();
+    for o in outputs {
+        let at = o
+            .position
+            .map_or_else(String::new, |p| format!(" at {},{}", p.x, p.y));
+        let _ = writeln!(
+            out,
+            "unplugged {} {}x{}@{:.3}Hz scale {}{at}",
+            o.name, o.mode.width, o.mode.height, o.mode.refresh.0, o.scale,
         );
     }
     out

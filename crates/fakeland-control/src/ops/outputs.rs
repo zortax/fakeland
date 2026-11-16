@@ -1,10 +1,12 @@
 //! Output operations.
 
-use fakeland::OutputState;
+use fakeland::{OutputConfig, OutputState};
 use fakeland_types::OutputId;
 
 use super::{Controller, OpError};
-use crate::methods::{AddOutputParams, NoParams, RemoveOutputParams, SetOutputParams};
+use crate::methods::{
+    AddOutputParams, NoParams, RemoveOutputParams, ReplugOutputParams, SetOutputParams,
+};
 
 impl Controller {
     /// Returns every output.
@@ -36,5 +38,16 @@ impl Controller {
     /// Removes an output.
     pub async fn remove_output(&self, p: RemoveOutputParams) -> Result<(), OpError> {
         Ok(self.session().remove_output(p.output).await?)
+    }
+
+    /// Plugs an unplugged output in again.
+    pub async fn replug_output(&self, p: ReplugOutputParams) -> Result<OutputState, OpError> {
+        let id = self.session().replug_output(p.name).await?;
+        self.output_state(Some(id)).await
+    }
+
+    /// Returns the configs of the unplugged outputs.
+    pub async fn unplugged_outputs(&self, _: NoParams) -> Result<Vec<OutputConfig>, OpError> {
+        Ok(self.session().unplugged_outputs().await?)
     }
 }

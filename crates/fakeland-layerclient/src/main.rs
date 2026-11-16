@@ -1,6 +1,7 @@
 //! Wayland client for layer-shell and session-lock tests: it shows one layer surface or one
 //! toplevel with an optional popup that may grab the seat, or locks the session with one lock
-//! surface per output. Every configure and input event goes to stdout as a JSON line.
+//! surface per output. Every configure, input and output hotplug event goes to stdout as a JSON
+//! line.
 
 #![forbid(unsafe_code)]
 
@@ -11,7 +12,9 @@ mod layer;
 mod lock;
 mod log;
 mod noop;
+mod outputs;
 mod shm;
+mod timer;
 mod xdg;
 
 use std::process::ExitCode;

@@ -105,6 +105,17 @@ pub struct Args {
     /// Unlock the session at the first button or key press.
     #[arg(long)]
     pub unlock_on_input: bool,
+    /// Unlock and lock again in one flush at the first button or key press. The old lock
+    /// surfaces stay. With `--unlock-on-input` the next press unlocks.
+    #[arg(long)]
+    pub relock_on_input: bool,
+    /// Unlock the session this many milliseconds after the first `locked`.
+    #[arg(long)]
+    pub unlock_after_ms: Option<u64>,
+    /// Lock the session again this many milliseconds after the first `locked`, with new lock
+    /// surfaces and without an unlock of the first lock.
+    #[arg(long)]
+    pub lock_again_after_ms: Option<u64>,
     /// Exit after this many seconds.
     #[arg(long, default_value_t = 30)]
     pub exit_after: u64,

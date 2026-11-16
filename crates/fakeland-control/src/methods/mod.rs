@@ -39,8 +39,8 @@ pub use input::{
 pub use media::{RecordStart, RecordStop, RecordStopParams, Recordings, Resources};
 pub use method::{Method, NoParams};
 pub use outputs::{
-    AddOutput, AddOutputParams, Outputs, RemoveOutput, RemoveOutputParams, SetOutput,
-    SetOutputParams,
+    AddOutput, AddOutputParams, Outputs, RemoveOutput, RemoveOutputParams, ReplugOutput,
+    ReplugOutputParams, SetOutput, SetOutputParams, UnpluggedOutputs,
 };
 pub use probes::Probe;
 pub use runs::{

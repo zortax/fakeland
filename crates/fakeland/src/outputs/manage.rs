@@ -1,5 +1,5 @@
-//! Output management on the compositor thread: hotplug, runtime changes, manual steps and the
-//! relayout of the windows, layer surfaces and lock surfaces of a changed output.
+//! Output management on the compositor thread: hotplug and replug, runtime changes, manual steps
+//! and the relayout of the windows, layer surfaces and lock surfaces of a changed output.
 
 use fakeland_timing::{ScheduleError, TimingMode};
 use fakeland_trace::Event;
@@ -22,6 +22,12 @@ pub enum OutputError {
     /// The last output cannot go.
     #[error("the last output cannot be removed")]
     LastOutput,
+    /// No unplugged output has the name.
+    #[error("no unplugged output named {0}")]
+    NotUnplugged(String),
+    /// No output was unplugged.
+    #[error("no output was unplugged")]
+    NothingUnplugged,
     /// The new configuration is invalid.
     #[error(transparent)]
     Config(#[from] ConfigError),
@@ -62,7 +68,8 @@ impl State {
         Ok(id)
     }
 
-    /// Removes an output. Its windows move to the primary output.
+    /// Removes an output and its `wl_output` global. Its windows move to the primary output. The
+    /// session keeps its config for a replug.
     pub fn remove_output(&mut self, id: OutputId) -> Result<(), OutputError> {
         if self.outputs.get(id).is_none() {
             return Err(OutputError::NoOutput(id));
@@ -87,6 +94,9 @@ impl State {
         let Some(out) = self.outputs.remove(id) else {
             return Err(OutputError::NoOutput(id));
         };
+        let mut config = out.config.clone();
+        config.position = Some(out.position);
+        self.outputs.park(config);
         self.space.unmap_output(&out.output);
         self.dh.disable_global::<State>(out.global.clone());
         let dh = self.dh.clone();
@@ -101,6 +111,20 @@ impl State {
         self.emit(Event::OutputRemoved { output: id });
         self.space_dirty = true;
         Ok(())
+    }
+
+    /// Plugs an unplugged output in again with its name, identity, modes, scale, transform, timing
+    /// and position. `None` selects the latest unplugged output. The output gets a new id.
+    pub fn replug_output(&mut self, name: Option<&str>) -> Result<OutputId, OutputError> {
+        let config = match (self.outputs.parked(name), name) {
+            (Some(c), _) => c.clone(),
+            (None, Some(name)) => return Err(OutputError::NotUnplugged(name.to_owned())),
+            (None, None) => return Err(OutputError::NothingUnplugged),
+        };
+        let name = config.name.clone();
+        let id = self.add_output(config)?;
+        self.outputs.unpark(&name);
+        Ok(id)
     }
 
     /// Applies one runtime change to an output.

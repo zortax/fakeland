@@ -2,7 +2,6 @@
 
 use wayland_client::protocol::wl_buffer::{self, WlBuffer};
 use wayland_client::protocol::wl_compositor::WlCompositor;
-use wayland_client::protocol::wl_output::WlOutput;
 use wayland_client::protocol::wl_region::WlRegion;
 use wayland_client::protocol::wl_shm::WlShm;
 use wayland_client::protocol::wl_shm_pool::WlShmPool;
@@ -19,7 +18,6 @@ delegate_noop!(App: ignore WlShm);
 delegate_noop!(App: ignore WlShmPool);
 delegate_noop!(App: ignore WlRegion);
 delegate_noop!(App: ignore WlSurface);
-delegate_noop!(App: ignore WlOutput);
 delegate_noop!(App: ignore XdgPositioner);
 delegate_noop!(App: ignore ZwlrLayerShellV1);
 delegate_noop!(App: ignore ExtSessionLockManagerV1);

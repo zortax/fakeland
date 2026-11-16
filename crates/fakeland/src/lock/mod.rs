@@ -3,6 +3,7 @@
 
 mod hold;
 mod lifecycle;
+mod route;
 mod state;
 
 pub use state::{LockRecord, SessionLock};

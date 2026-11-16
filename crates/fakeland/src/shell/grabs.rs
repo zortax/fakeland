@@ -1,7 +1,8 @@
 //! Popup grabs. A grabbed popup chain holds keyboard focus, and pointer focus stays on its
 //! client. A press on a surface of another client, or on no surface, dismisses the chain with
-//! `popup_done`, and the press then reaches the surface under the pointer. A lock and a focus
-//! operation end the grab too.
+//! `popup_done`, and the press then reaches the surface under the pointer. A press on another
+//! surface of the grabbing client, such as the parent of the chain, reaches that surface and
+//! keeps the grab. A lock and a focus operation end the grab too.
 
 use smithay::desktop::{
     PopupKeyboardGrab, PopupKind, PopupManager, PopupPointerGrab, PopupUngrabStrategy,
