@@ -1,6 +1,6 @@
 //! Wayland client for layer-shell and session-lock tests: it shows one layer surface or one
-//! toplevel with an optional popup, or locks the session with one lock surface per output. Every configure and
-//! input event goes to stdout as a JSON line.
+//! toplevel with an optional popup that may grab the seat, or locks the session with one lock
+//! surface per output. Every configure and input event goes to stdout as a JSON line.
 
 #![forbid(unsafe_code)]
 

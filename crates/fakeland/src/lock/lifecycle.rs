@@ -1,5 +1,5 @@
-//! Lock and unlock, lock surfaces that cover their output, their mapping on commit, and the hit
-//! test and keyboard focus target while the session is locked.
+//! Lock surfaces that cover their output, their mapping on commit, and the hit test and keyboard
+//! focus target while the session is locked.
 
 use fakeland_trace::Event;
 use fakeland_types::{OutputId, WindowId};
@@ -11,38 +11,13 @@ use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_output::WlOutput;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point};
-use smithay::wayland::session_lock::{LockSurface, SessionLocker};
+use smithay::wayland::session_lock::LockSurface;
 
 use super::LockRecord;
 use crate::layers::Hit;
 use crate::server::{ClientState, State};
 
 impl State {
-    /// Locks the session. The outputs show only lock surfaces from now on, so the lock is
-    /// confirmed at once. A second lock fails while the session is locked.
-    pub fn lock_requested(&mut self, locker: SessionLocker) {
-        if self.lock.locked {
-            drop(locker);
-            return;
-        }
-        self.lock.locked = true;
-        locker.lock();
-        self.refresh_keyboard_focus();
-        self.space_dirty = true;
-    }
-
-    /// Unlocks the session and forgets the lock surfaces.
-    pub fn unlock_requested(&mut self) {
-        self.lock.locked = false;
-        let ids: Vec<WindowId> = self.lock.surfaces.iter().map(|s| s.id).collect();
-        for id in ids {
-            self.forget_lock_surface(id);
-        }
-        self.lock.focus = None;
-        self.refresh_keyboard_focus();
-        self.space_dirty = true;
-    }
-
     /// Registers a lock surface and sizes it to its output.
     pub fn lock_surface_created(&mut self, surface: LockSurface, output: WlOutput) {
         let wl = surface.wl_surface().clone();

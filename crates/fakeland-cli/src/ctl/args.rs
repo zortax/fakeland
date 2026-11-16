@@ -34,6 +34,8 @@ pub enum CtlCommand {
     Outputs,
     /// List launched apps.
     Apps,
+    /// Unlock a locked session without the lock client, for example after the lock client hung.
+    ForceUnlock,
     /// Launch an app.
     Launch {
         /// Wait this long for its first window.

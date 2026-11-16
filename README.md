@@ -44,7 +44,9 @@ behind it. The app cannot tell the difference:
   session lock (`ext_session_lock_v1`) work like on a desktop compositor:
   exclusive zones shrink the work area of windows, layers stack around the
   windows, and bars, launchers, notifications and lock screens show up in
-  window lists, screenshots and input by coordinates.
+  window lists, screenshots and input by coordinates. Popup grabs dismiss menus
+  on presses elsewhere. A lock whose client died yields to the next lock, and
+  `fakeland ctl force-unlock` (MCP `force_unlock`) recovers a hung lock.
 - **Headless by default.** A nested viewer window is available to watch the
   session.
 

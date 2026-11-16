@@ -80,6 +80,7 @@ pub use session::{
 };
 pub use shell::{
     KeyboardMode, LayerInfo, MatchError, Placement, ShellLayer, WindowInfo, WindowKind,
+    WindowOpError,
 };
 pub use util::block_on;
 pub use video::{

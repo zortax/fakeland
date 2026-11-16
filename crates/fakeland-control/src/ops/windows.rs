@@ -1,4 +1,4 @@
-//! Window operations: listing, waits and window changes.
+//! Window operations: listing, waits, window changes and the forced unlock.
 
 use fakeland::{ClientInfo, WaitOutput, WindowInfo};
 use fakeland_scenario::{Wait, WindowRef};
@@ -65,5 +65,10 @@ impl Controller {
     /// Runs a window operation.
     pub async fn window_op(&self, p: WindowOpParams) -> Result<(), OpError> {
         Ok(self.session().window_op(p.window, p.op).await?)
+    }
+
+    /// Unlocks a locked session without the lock client.
+    pub async fn force_unlock(&self, _: NoParams) -> Result<bool, OpError> {
+        Ok(self.session().force_unlock().await?)
     }
 }

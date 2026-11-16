@@ -59,6 +59,6 @@ pub use triggers::{
     InstallTriggers, InstallTriggersParams, RemoveTriggers, RemoveTriggersParams, TriggerSet,
 };
 pub use windows::{
-    Clients, WaitFor, WaitFrames, WaitFramesParams, WaitSettled, WaitSettledParams, WaitWindow,
-    WaitWindowParams, WindowOpParams, WindowOperation, Windows, any_window,
+    Clients, ForceUnlock, WaitFor, WaitFrames, WaitFramesParams, WaitSettled, WaitSettledParams,
+    WaitWindow, WaitWindowParams, WindowOpParams, WindowOperation, Windows, any_window,
 };

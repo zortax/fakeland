@@ -221,6 +221,7 @@ fn init(config: SessionConfig, clock: SharedClock) -> Result<Parts, StartError> 
         seat,
         space: Space::default(),
         popups: PopupManager::default(),
+        popup_grab: None,
         outputs: Outputs::default(),
         surfaces: Surfaces::default(),
         frames: Frames::default(),

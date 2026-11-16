@@ -1,7 +1,10 @@
 //! Shared helpers of the integration tests: a lock that runs one session at a time, the output
-//! directory for screenshots, the reference and layer client paths and image checks.
+//! directory for screenshots, the reference and layer client paths, image checks, and the
+//! helpers of the shell tests.
 
 #![allow(dead_code)]
+
+pub mod shell;
 
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};

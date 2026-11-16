@@ -77,7 +77,7 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for App {
                 log::event("configure", json!({ "width": width, "height": height }));
                 let w = if width == 0 { app.args.size.0 } else { width };
                 let h = if height == 0 { app.args.size.1 } else { height };
-                let first = app.popup.is_none();
+                let first = app.popup.is_none() && !app.args.popup_grab;
                 if let Some((surface, _)) = &app.layer
                     && let Err(e) = app.draw(surface, w.max(1), h.max(1), app.args.color, qh)
                 {

@@ -1,5 +1,5 @@
 //! The xdg shell: a toplevel with the requested input region, popups of the layer surface or the
-//! toplevel, their configures, and pings.
+//! toplevel with an optional seat grab, their configures, and pings.
 
 use serde_json::json;
 use wayland_client::protocol::wl_surface::WlSurface;
@@ -91,9 +91,36 @@ impl App {
         if let Err(e) = self.draw(&t.surface, w.max(1), h.max(1), self.args.color, qh) {
             eprintln!("fakeland-layerclient: {e}");
         }
-        if self.popup.is_none() {
+        if self.popup.is_none() && !self.args.popup_grab {
             let parent = t.xdg.clone();
             self.create_popup(Some(&parent), qh, |_| {});
+        }
+    }
+
+    /// Opens the popup on the layer surface or the toplevel and grabs the seat with the serial
+    /// of a button press.
+    pub fn open_grabbed_popup(&mut self, serial: u32, qh: &QueueHandle<Self>) {
+        let Some(seat) = self.seat.clone() else {
+            return;
+        };
+        if let Some(t) = &self.toplevel {
+            let parent = t.xdg.clone();
+            self.create_popup(Some(&parent), qh, |p| p.grab(&seat, serial));
+        } else if let Some((_, ls)) = &self.layer {
+            let ls = ls.clone();
+            self.create_popup(None, qh, |p| {
+                ls.get_popup(p);
+                p.grab(&seat, serial);
+            });
+        }
+    }
+
+    /// Destroys the popup.
+    fn close_popup(&mut self) {
+        if let Some(p) = self.popup.take() {
+            p.popup.destroy();
+            p.xdg.destroy();
+            p.surface.destroy();
         }
     }
 }
@@ -172,7 +199,7 @@ impl Dispatch<XdgToplevel, ()> for App {
 
 impl Dispatch<XdgPopup, ()> for App {
     fn event(
-        _: &mut Self,
+        app: &mut Self,
         _: &XdgPopup,
         event: xdg_popup::Event,
         _: &(),
@@ -189,7 +216,10 @@ impl Dispatch<XdgPopup, ()> for App {
                 "popup_configure",
                 json!({ "x": x, "y": y, "width": width, "height": height }),
             ),
-            xdg_popup::Event::PopupDone => log::event("popup_done", json!({})),
+            xdg_popup::Event::PopupDone => {
+                log::event("popup_done", json!({}));
+                app.close_popup();
+            }
             _ => {}
         }
     }

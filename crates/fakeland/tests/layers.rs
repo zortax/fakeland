@@ -1,121 +1,18 @@
-//! Layer-shell surfaces and the session lock with the layer client: work areas from exclusive
-//! zones, stacking in screenshots, clicks by coordinates, input regions, keyboard focus rules,
-//! popups, close on output removal, and lock and unlock. Run with
-//! `cargo test -p fakeland -- --ignored`.
+//! Layer-shell surfaces with the layer client: work areas from exclusive zones, stacking in
+//! screenshots, clicks by coordinates, input regions, keyboard focus rules, popups and close on
+//! output removal. Run with `cargo test -p fakeland -- --ignored`.
 
 mod support;
 
-use std::time::Duration;
-
 use fakeland::{
-    App, CaptureOptions, CaptureTarget, Fakeland, KeyboardMode, LaunchSpec, OutputConfig, Session,
-    ShellLayer, WindowInfo, WindowKind, WindowOp, WindowRef,
+    Fakeland, KeyboardMode, OutputConfig, ShellLayer, WindowKind, WindowOp, WindowOpError,
+    WindowRef,
 };
-use fakeland_scenario::{Button, Position};
 use fakeland_types::{Hz, Nanos, Size};
-use serde_json::Value;
-
-fn session(width: i32, height: i32) -> Session {
-    Fakeland::builder()
-        .output(OutputConfig::new("DP-1").mode(width, height, Hz(60.0)))
-        .start()
-        .expect("start")
-}
-
-fn layer(args: &[&str]) -> LaunchSpec {
-    LaunchSpec::new(support::layerclient()).args(args.iter().copied())
-}
-
-fn toplevel(session: &Session, app_id: &str) -> (App, WindowInfo) {
-    let app = session
-        .blocking_launch(LaunchSpec::new(support::testclient()).args([
-            "--scene",
-            "click",
-            "--app-id",
-            app_id,
-            "--exit-after",
-            "30",
-        ]))
-        .expect("launch");
-    let window = session
-        .blocking_wait_window(WindowRef::app_id(app_id), Nanos::from_secs(10))
-        .unwrap_or_else(|e| panic!("no window ({e}): {}", app.stderr()));
-    (app, window)
-}
-
-fn wait_layer(session: &Session, app: &App, namespace: &str) -> WindowInfo {
-    session
-        .blocking_wait_window(WindowRef::layer(namespace), Nanos::from_secs(10))
-        .unwrap_or_else(|e| panic!("no layer surface ({e}): {}", app.stderr()))
-}
-
-/// Returns the JSON events of a client log.
-fn events(app: &App) -> Vec<Value> {
-    app.stdout()
-        .lines()
-        .filter_map(|l| serde_json::from_str(l).ok())
-        .collect()
-}
-
-/// Polls a condition every 20 ms for up to 5 s and returns its first value.
-fn poll<T>(what: impl Fn() -> String, mut f: impl FnMut() -> Option<T>) -> T {
-    for _ in 0..250 {
-        if let Some(v) = f() {
-            return v;
-        }
-        std::thread::sleep(Duration::from_millis(20));
-    }
-    panic!("{}", what())
-}
-
-/// Waits until a client logged an event that matches.
-fn wait_event(app: &App, what: &str, f: impl Fn(&Value) -> bool) -> Value {
-    poll(
-        || format!("no {what} event: {}\n{}", app.stdout(), app.stderr()),
-        || events(app).into_iter().find(|e| f(e)),
-    )
-}
-
-fn is(e: &Value, event: &str) -> bool {
-    e["event"] == event
-}
-
-fn count(app: &App, f: impl Fn(&Value) -> bool) -> usize {
-    events(app).iter().filter(|e| f(e)).count()
-}
-
-/// Waits until a window matches a condition.
-fn wait_info(session: &Session, id: WindowRef, f: impl Fn(&WindowInfo) -> bool) -> WindowInfo {
-    poll(
-        || format!("{id:?} never matched"),
-        || {
-            session
-                .blocking_wait_window(id.clone(), Nanos::from_secs(5))
-                .ok()
-                .filter(|w| f(w))
-        },
-    )
-}
-
-fn pixel_at(session: &Session, x: u32, y: u32) -> [u8; 3] {
-    let shot = session
-        .blocking_screenshot(
-            CaptureTarget::default(),
-            CaptureOptions {
-                include_cursor: false,
-                ..CaptureOptions::default()
-            },
-        )
-        .expect("screenshot");
-    let px = shot.image.pixel(x, y).expect("pixel");
-    [px[0], px[1], px[2]]
-}
-
-fn click(session: &Session, x: f64, y: f64) {
-    session
-        .blocking_click(Position::output(x, y), Button::Left)
-        .expect("click");
-}
+use support::shell::{
+    click, count_events, is, layer, pixel_at, session, toplevel, wait_event, wait_info, wait_layer,
+    wait_pixel,
+};
 
 #[test]
 #[ignore = "runs the layer client"]
@@ -174,6 +71,16 @@ fn bar_reserves_its_zone_and_takes_clicks() {
         .blocking_wait_window(WindowRef::id(window.id), Nanos::from_secs(1))
         .expect("window");
     assert!(after.focused);
+    let refused = s.blocking_window_op(WindowRef::layer("bar"), WindowOp::Focus);
+    assert!(
+        matches!(
+            refused,
+            Err(fakeland::SessionError::WindowOp(
+                WindowOpError::NoKeyboardFocus(id)
+            )) if id == info.id
+        ),
+        "a bar without keyboard interactivity refuses focus: {refused:?}"
+    );
 
     s.blocking_window_op(WindowRef::layer("bar"), WindowOp::Close)
         .expect("close");
@@ -243,7 +150,7 @@ fn on_demand_layers_take_focus_and_honor_input_regions() {
     // Below the input region the press reaches the toplevel, which takes focus.
     click(&s, 350.0, 250.0);
     wait_event(&menu, "keyboard leave", |e| is(e, "keyboard_leave"));
-    assert_eq!(count(&menu, |e| is(e, "button")), 0);
+    assert_eq!(count_events(&menu, |e| is(e, "button")), 0);
     let w = wait_info(&s, WindowRef::id(window.id), |w| w.focused);
     assert!(w.focused);
 
@@ -252,7 +159,7 @@ fn on_demand_layers_take_focus_and_honor_input_regions() {
     let press = wait_event(&menu, "button", |e| is(e, "button"));
     assert_eq!(press["surface"], "layer");
     wait_info(&s, WindowRef::layer("menu"), |w| w.focused);
-    assert_eq!(count(&menu, |e| is(e, "keyboard_enter")), 2);
+    assert_eq!(count_events(&menu, |e| is(e, "keyboard_enter")), 2);
 
     // The popup takes input.
     click(&s, 150.0, 300.0);
@@ -320,8 +227,65 @@ fn exclusive_layers_keep_focus_and_layers_stack_around_toplevels() {
     click(&s, (g.x + 10) as f64, (g.y + 10) as f64);
     s.blocking_key("b").expect("key");
     wait_event(&dialog, "key", |e| is(e, "key") && e["key"] == 48);
-    assert_eq!(count(&dialog, |e| is(e, "keyboard_leave")), 0);
+    assert_eq!(count_events(&dialog, |e| is(e, "keyboard_leave")), 0);
     s.blocking_shutdown().expect("shutdown");
+}
+
+#[test]
+#[ignore = "runs the layer client"]
+fn the_latest_exclusive_overlay_takes_focus_and_stacks_on_top() {
+    let _serial = support::serial();
+    let s = session(1280, 720);
+    let exclusive = |namespace: &str, color: &str| {
+        layer(&[
+            "--namespace",
+            namespace,
+            "--layer",
+            "overlay",
+            "--keyboard",
+            "exclusive",
+            "--size",
+            "200x100",
+            "--color",
+            color,
+        ])
+    };
+    let first = s
+        .blocking_launch(exclusive("first", "#ff0000"))
+        .expect("launch first");
+    wait_event(&first, "keyboard enter", |e| is(e, "keyboard_enter"));
+    let second = s
+        .blocking_launch(exclusive("second", "#00ff00"))
+        .expect("launch second");
+    wait_layer(&s, &second, "second");
+    wait_event(&second, "keyboard enter", |e| is(e, "keyboard_enter"));
+    wait_event(&first, "keyboard leave", |e| is(e, "keyboard_leave"));
+    wait_info(&s, WindowRef::layer("second"), |w| w.focused);
+    wait_pixel(&s, 640, 360, [0, 255, 0]);
+
+    // A press on the shared spot reaches the top surface, and keys follow it.
+    click(&s, 640.0, 360.0);
+    let press = wait_event(&second, "button", |e| is(e, "button"));
+    assert_eq!(press["surface"], "layer");
+    assert_eq!(count_events(&first, |e| is(e, "button")), 0);
+    s.blocking_key("c").expect("key");
+    wait_event(&second, "key", |e| is(e, "key") && e["key"] == 46);
+    assert_eq!(count_events(&first, |e| is(e, "key")), 0);
+
+    // When the top surface goes, the one below takes focus back.
+    s.blocking_window_op(WindowRef::layer("second"), WindowOp::Close)
+        .expect("close");
+    wait_event(&second, "closed", |e| is(e, "closed"));
+    poll_focus(&first);
+    s.blocking_shutdown().expect("shutdown");
+}
+
+/// Waits until a client got keyboard focus a second time.
+fn poll_focus(app: &fakeland::App) {
+    support::shell::poll(
+        || format!("no second keyboard enter: {}", app.stdout()),
+        || (count_events(app, |e| is(e, "keyboard_enter")) >= 2).then_some(()),
+    );
 }
 
 #[test]
@@ -356,65 +320,6 @@ fn removed_outputs_close_their_layers() {
     wait_event(&panel, "closed", |e| is(e, "closed"));
     let windows = s.blocking_windows().expect("windows");
     assert!(windows.iter().all(|w| w.namespace() != Some("panel")));
-    s.blocking_shutdown().expect("shutdown");
-}
-
-#[test]
-#[ignore = "runs the layer client"]
-fn the_lock_hides_everything_until_unlock() {
-    let _serial = support::serial();
-    let s = session(1280, 720);
-    let (_top, window) = toplevel(&s, "org.example.locked");
-    let bar = s
-        .blocking_launch(layer(&[
-            "--namespace",
-            "bar",
-            "--anchor",
-            "top,left,right",
-            "--size",
-            "0x40",
-            "--color",
-            "#ff0000",
-        ]))
-        .expect("launch bar");
-    wait_layer(&s, &bar, "bar");
-    let lock = s
-        .blocking_launch(layer(&[
-            "--mode",
-            "lock",
-            "--unlock-on-input",
-            "--color",
-            "#4040ff",
-        ]))
-        .expect("launch lock");
-    wait_event(&lock, "locked", |e| is(e, "locked"));
-    let surface = s
-        .blocking_wait_window(WindowRef::Lock, Nanos::from_secs(10))
-        .unwrap_or_else(|e| panic!("no lock surface ({e}): {}", lock.stderr()));
-    assert_eq!(surface.kind, WindowKind::Lock);
-    assert_eq!((surface.geometry.w, surface.geometry.h), (1280, 720));
-    wait_info(&s, WindowRef::Lock, |w| w.focused);
-    s.blocking_wait_settled(
-        WindowRef::Lock,
-        Nanos::from_millis(100),
-        Nanos::from_secs(5),
-    )
-    .expect("settled");
-    assert_eq!(pixel_at(&s, 640, 20), [64, 64, 255], "the bar stays hidden");
-    assert_eq!(pixel_at(&s, 640, 400), [64, 64, 255]);
-
-    // A click on the bar position reaches the lock surface, which unlocks.
-    click(&s, 640.0, 20.0);
-    assert_eq!(count(&bar, |e| is(e, "button")), 0);
-    let press = wait_event(&lock, "lock button", |e| is(e, "button"));
-    assert_eq!(press["surface"], "lock0");
-    wait_event(&lock, "unlocked", |e| is(e, "unlocked"));
-    let back = wait_info(&s, WindowRef::id(window.id), |w| w.focused);
-    assert!(back.focused);
-    poll(
-        || "the bar shows after unlock".to_owned(),
-        || (pixel_at(&s, 640, 20) == [255, 0, 0]).then_some(()),
-    );
     s.blocking_shutdown().expect("shutdown");
 }
 

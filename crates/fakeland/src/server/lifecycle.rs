@@ -43,6 +43,7 @@ impl State {
             self.space_dirty = false;
             self.space.refresh();
             self.popups.cleanup();
+            self.reap_popup_grab();
         }
         self.run_observers();
         self.poll_waiters();

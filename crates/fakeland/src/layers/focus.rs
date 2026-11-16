@@ -35,23 +35,22 @@ impl State {
     }
 
     /// Returns the topmost mapped exclusive layer surface on the top or overlay layer.
-    fn exclusive_layer(&self) -> Option<WlSurface> {
-        self.layers
-            .iter()
-            .rev()
-            .filter(|l| l.mapped_at.is_some())
-            .filter_map(|l| {
-                let state = l.layer.cached_state();
-                let rank = match state.layer {
-                    Layer::Overlay => 1,
-                    Layer::Top => 0,
-                    _ => return None,
-                };
-                (state.keyboard_interactivity == KeyboardInteractivity::Exclusive)
-                    .then(|| (rank, l.layer.wl_surface().clone()))
-            })
-            .max_by_key(|(rank, _)| *rank)
-            .map(|(_, surface)| surface)
+    pub(crate) fn exclusive_layer(&self) -> Option<WlSurface> {
+        topmost(
+            self.layers
+                .iter()
+                .filter(|l| l.mapped_at.is_some())
+                .filter_map(|l| {
+                    let state = l.layer.cached_state();
+                    let rank = match state.layer {
+                        Layer::Overlay => 1,
+                        Layer::Top => 0,
+                        _ => return None,
+                    };
+                    (state.keyboard_interactivity == KeyboardInteractivity::Exclusive)
+                        .then(|| (rank, l.layer.wl_surface().clone()))
+                }),
+        )
     }
 
     /// Gives keyboard focus to the surface that the focus rules select.
@@ -110,5 +109,35 @@ impl State {
                 }
             }
         }
+    }
+}
+
+/// Returns the topmost item of a list in creation order: the highest rank, and within one rank
+/// the latest item. The stacking order puts later surfaces of one layer on top.
+fn topmost<T>(items: impl Iterator<Item = (u8, T)>) -> Option<T> {
+    items
+        .fold(None, |top: Option<(u8, T)>, (rank, item)| match top {
+            Some((r, t)) if r > rank => Some((r, t)),
+            _ => Some((rank, item)),
+        })
+        .map(|(_, item)| item)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::topmost;
+
+    #[test]
+    fn the_latest_surface_of_the_highest_layer_wins() {
+        assert_eq!(
+            topmost([(1, "a"), (1, "b"), (0, "c")].into_iter()),
+            Some("b")
+        );
+        assert_eq!(
+            topmost([(0, "a"), (1, "b"), (0, "c")].into_iter()),
+            Some("b")
+        );
+        assert_eq!(topmost([(0, "a"), (0, "b")].into_iter()), Some("b"));
+        assert_eq!(topmost(std::iter::empty::<(u8, &str)>()), None);
     }
 }

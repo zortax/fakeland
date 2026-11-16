@@ -151,6 +151,17 @@ pub fn run(c: &ControlClient, json: bool, cmd: &CtlCommand) -> Result<Option<i32
         CtlCommand::Outputs => emit(json, &c.blocking_call::<Outputs>(NoParams {})?, |o| {
             outputs_text(o)
         })?,
+        CtlCommand::ForceUnlock => emit(
+            json,
+            &c.blocking_call::<ForceUnlock>(NoParams {})?,
+            |unlocked| {
+                if *unlocked {
+                    "unlocked the session".to_owned()
+                } else {
+                    "the session was not locked".to_owned()
+                }
+            },
+        )?,
         CtlCommand::Apps => emit(json, &c.blocking_call::<Apps>(NoParams {})?, |apps| {
             apps.iter().map(app_text).collect::<Vec<_>>().join("\n")
         })?,

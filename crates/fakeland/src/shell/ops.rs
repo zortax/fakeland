@@ -79,6 +79,9 @@ pub enum WindowOpError {
     /// The operation needs a toplevel, and the window is a layer or lock surface.
     #[error("window {0} is no toplevel")]
     NotToplevel(WindowId),
+    /// The window is a layer surface without keyboard interactivity.
+    #[error("window {0} takes no keyboard focus")]
+    NoKeyboardFocus(WindowId),
 }
 
 impl State {
@@ -94,6 +97,7 @@ impl State {
             .unwrap_or(rec.floating);
         match op {
             WindowOp::Focus => {
+                self.end_popup_grabs();
                 self.focus_window(Some(id));
                 return Ok(());
             }
@@ -155,6 +159,14 @@ impl State {
         }
         match op {
             WindowOp::Focus if is_layer => {
+                let takes_focus = self
+                    .layers
+                    .get(id)
+                    .is_some_and(|r| r.layer.can_receive_keyboard_focus());
+                if !takes_focus {
+                    return Err(WindowOpError::NoKeyboardFocus(id));
+                }
+                self.end_popup_grabs();
                 self.focus_layer(id);
             }
             WindowOp::Focus => {

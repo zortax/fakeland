@@ -4,7 +4,7 @@
 
 use fakeland_trace::Event;
 use fakeland_types::{SharedClock, Timestamp};
-use smithay::desktop::{PopupManager, Space, Window};
+use smithay::desktop::{PopupGrab, PopupManager, Space, Window};
 use smithay::input::Seat;
 use smithay::reexports::calloop::{LoopHandle, LoopSignal};
 use smithay::reexports::wayland_server::DisplayHandle;
@@ -53,6 +53,8 @@ pub struct State {
     pub space: Space<Window>,
     /// Popups.
     pub popups: PopupManager,
+    /// The grab of the topmost grabbed popup chain.
+    pub popup_grab: Option<PopupGrab<State>>,
     /// The faked outputs.
     pub outputs: Outputs,
     /// Surface bookkeeping.

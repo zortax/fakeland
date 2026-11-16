@@ -200,6 +200,24 @@ impl FakelandMcp {
         )
     }
 
+    /// Unlocks the session.
+    #[tool(
+        description = "Unlock a session that an ext-session-lock client locked, without that client. Use it to recover when the lock client hangs or died. The lock client still sees the session locked."
+    )]
+    async fn force_unlock(&self, Parameters(_): Parameters<NoArgs>) -> ToolResult {
+        finish(
+            async {
+                let c = self.ctl().await?;
+                if bounded(CALL_SLACK, c.force_unlock(NoParams {})).await?? {
+                    done("The session is unlocked.".to_owned())
+                } else {
+                    done("The session was not locked.".to_owned())
+                }
+            }
+            .await,
+        )
+    }
+
     /// Returns app output.
     #[tool(
         description = "Show the last lines of stdout and stderr of a launched app, and whether it still runs."

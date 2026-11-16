@@ -1,9 +1,10 @@
-//! Window management: toplevel lifecycle, the window policy, configures, popups, focus, mapping,
-//! surface scale, window operations and window queries.
+//! Window management: toplevel lifecycle, the window policy, configures, popups and their grabs,
+//! focus, mapping, surface scale, window operations and window queries.
 
 mod commit;
 mod configure;
 mod focus;
+mod grabs;
 mod info;
 mod layout;
 mod matcher;

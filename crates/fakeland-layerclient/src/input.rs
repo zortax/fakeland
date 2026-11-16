@@ -40,7 +40,7 @@ impl Dispatch<WlPointer, ()> for App {
         event: wl_pointer::Event,
         _: &(),
         _: &Connection,
-        _: &QueueHandle<Self>,
+        qh: &QueueHandle<Self>,
     ) {
         match event {
             wl_pointer::Event::Enter {
@@ -70,6 +70,7 @@ impl Dispatch<WlPointer, ()> for App {
                 ..
             } => app.pointer = (surface_x, surface_y),
             wl_pointer::Event::Button {
+                serial,
                 button,
                 state: WEnum::Value(state),
                 ..
@@ -87,6 +88,11 @@ impl Dispatch<WlPointer, ()> for App {
                 );
                 if pressed && app.args.unlock_on_input {
                     app.unlock();
+                }
+                let on_parent =
+                    matches!(app.pointer_surface.as_deref(), Some("layer" | "toplevel"));
+                if pressed && app.args.popup_grab && app.popup.is_none() && on_parent {
+                    app.open_grabbed_popup(serial, qh);
                 }
             }
             wl_pointer::Event::Axis { axis, value, .. } => log::event(

@@ -77,6 +77,8 @@ pub struct App {
     pub compositor: WlCompositor,
     /// `wl_shm`.
     pub shm: WlShm,
+    /// `wl_seat`.
+    pub seat: Option<WlSeat>,
     /// `xdg_wm_base`, for popups.
     pub wm_base: Option<XdgWmBase>,
     /// `zwlr_layer_shell_v1`.
@@ -113,12 +115,13 @@ impl App {
         let qh = queue.handle();
         let compositor: WlCompositor = globals.bind(&qh, 4..=6, ())?;
         let shm: WlShm = globals.bind(&qh, 1..=1, ())?;
-        let _seat: Option<WlSeat> = globals.bind(&qh, 5..=9, ()).ok();
+        let seat: Option<WlSeat> = globals.bind(&qh, 5..=9, ()).ok();
         let outputs = bind_outputs(&globals, &qh);
         let mut app = Self {
             args,
             compositor,
             shm,
+            seat,
             wm_base: globals.bind(&qh, 1..=6, ()).ok(),
             layer_shell: globals.bind(&qh, 1..=4, ()).ok(),
             lock_manager: globals.bind(&qh, 1..=1, ()).ok(),

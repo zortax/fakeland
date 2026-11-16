@@ -187,6 +187,9 @@ impl State {
                 },
             },
         );
+        if pressed {
+            self.refresh_keyboard_focus();
+        }
         self.input.pointer_group.push(PendingSent {
             id,
             kind: InputKind::PointerButton,

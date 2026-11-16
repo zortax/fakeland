@@ -61,6 +61,7 @@ pub async fn dispatch(c: &Controller, method: &str, params: Value) -> Result<Val
         WaitFrames::NAME => run::<WaitFrames, _>(params, |p| c.wait_frames(p)).await,
         WaitFor::NAME => run::<WaitFor, _>(params, |p| c.wait(p)).await,
         WindowOperation::NAME => run::<WindowOperation, _>(params, |p| c.window_op(p)).await,
+        ForceUnlock::NAME => run::<ForceUnlock, _>(params, |p| c.force_unlock(p)).await,
         Launch::NAME => run::<Launch, _>(params, |p| c.launch(p)).await,
         Apps::NAME => run::<Apps, _>(params, |p| async move { Ok(c.apps_list(p)) }).await,
         Kill::NAME => run::<Kill, _>(params, |p| c.kill(p)).await,

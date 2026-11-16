@@ -1,4 +1,4 @@
-//! Window methods: listing, waits and window operations.
+//! Window methods: listing, waits, window operations and the forced unlock.
 
 use fakeland::{ClientInfo, WaitOutput, WindowInfo, WindowOp};
 use fakeland_scenario::{Wait, WindowRef};
@@ -89,4 +89,9 @@ method!(
 method!(
     /// Runs a window operation.
     WindowOperation, "window_op", WindowOpParams => ()
+);
+method!(
+    /// Unlocks a locked session without the lock client. Returns false when the session is not
+    /// locked.
+    ForceUnlock, "force_unlock", NoParams => bool
 );

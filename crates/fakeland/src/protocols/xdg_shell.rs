@@ -1,5 +1,5 @@
-//! `xdg_wm_base` version 6. Toplevels and popups go to the window manager, and acked configures
-//! land in the trace.
+//! `xdg_wm_base` version 6. Toplevels, popups and popup grabs go to the window manager, and acked
+//! configures land in the trace.
 
 use smithay::delegate_xdg_shell;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
@@ -24,7 +24,9 @@ impl XdgShellHandler for State {
         self.popup_created(surface, positioner);
     }
 
-    fn grab(&mut self, _surface: PopupSurface, _seat: WlSeat, _serial: Serial) {}
+    fn grab(&mut self, surface: PopupSurface, seat: WlSeat, serial: Serial) {
+        self.popup_grab_requested(surface, seat, serial);
+    }
 
     fn reposition_request(
         &mut self,

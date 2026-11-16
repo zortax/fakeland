@@ -95,6 +95,10 @@ pub struct Args {
     /// A popup at X,Y,W,H, relative to the layer surface or the toplevel.
     #[arg(long, value_parser = parse_rect)]
     pub popup: Option<RectArg>,
+    /// Open the popup at a button press on the layer surface or the toplevel, and grab the
+    /// seat with it. The popup closes at `popup_done`, and the next press opens it again.
+    #[arg(long)]
+    pub popup_grab: bool,
     /// The popup fill color.
     #[arg(long, default_value = "#e06020", value_parser = parse_color)]
     pub popup_color: ColorArg,

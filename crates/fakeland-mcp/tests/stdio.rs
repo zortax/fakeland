@@ -154,6 +154,7 @@ fn drives_the_reference_client_over_stdio() {
         "launch",
         "list_windows",
         "focus_window",
+        "force_unlock",
         "screenshot",
         "click",
         "double_click",
