@@ -4,7 +4,7 @@
 use fakeland_trace::Event;
 use fakeland_types::{OutputId, WindowId};
 use smithay::backend::renderer::utils::with_renderer_surface_state;
-use smithay::desktop::{LayerSurface, layer_map_for_output};
+use smithay::desktop::LayerSurface;
 use smithay::output::Output;
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_output::WlOutput;
@@ -18,7 +18,8 @@ use crate::server::{ClientState, State};
 
 impl State {
     /// Registers a new layer surface on its output. The output is the one the client names, else
-    /// the launch output of its process, else the primary output.
+    /// the launch output of its process, else the primary output. The surface joins the layer map
+    /// of the output at its initial commit and leaves it when it unmaps.
     pub fn layer_created(
         &mut self,
         surface: WlrLayerSurface,
@@ -38,12 +39,9 @@ impl State {
             .and_then(|o| self.outputs.id_of(&o))
             .unwrap_or_else(|| self.output_for_new_window(pid));
         let layer = LayerSurface::new(surface, namespace);
-        let Some(out) = self.outputs.get(output) else {
+        if self.outputs.get(output).is_none() {
             layer.layer_surface().send_close();
             return;
-        };
-        if let Err(e) = layer_map_for_output(&out.output).map_layer(&layer) {
-            tracing::debug!("layer surface not mapped: {e}");
         }
         let id = self.ids.window();
         self.layers.insert(LayerRecord {
@@ -83,6 +81,11 @@ impl State {
                 if let Some(rec) = self.layers.get_mut(id) {
                     rec.configured = true;
                 }
+                self.change_layer_map(output, |map| {
+                    if let Err(e) = map.map_layer(&layer) {
+                        tracing::debug!("layer surface not mapped: {e}");
+                    }
+                });
                 self.send_layer_configure(&layer);
             }
             (true, false) => self.map_layer(id),
@@ -160,9 +163,11 @@ impl State {
             return;
         }
         rec.configured = false;
+        let (layer, output) = (rec.layer.clone(), rec.output);
         if self.layers.focus == Some(id) {
             self.layers.focus = None;
         }
+        self.change_layer_map(output, |map| map.unmap_layer(&layer));
         self.space_dirty = true;
         self.emit(Event::WindowUnmapped { window: id });
     }
@@ -186,10 +191,7 @@ impl State {
         let Some(rec) = self.layers.remove(id) else {
             return;
         };
-        if let Some(out) = self.outputs.get(rec.output) {
-            layer_map_for_output(&out.output).unmap_layer(&rec.layer);
-        }
-        self.arrange_layers(rec.output);
+        self.change_layer_map(rec.output, |map| map.unmap_layer(&rec.layer));
         self.refresh_keyboard_focus();
         self.space_dirty = true;
     }

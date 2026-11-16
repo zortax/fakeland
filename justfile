@@ -17,9 +17,9 @@ lint:
     cargo clippy --workspace --all-targets -- -D warnings
     cargo clippy --workspace --all-targets --features fakeland/viewer,fakeland/nvml,fakeland-cli/viewer,fakeland-cli/nvml,fakeland-mcp/viewer,fakeland-mcp/nvml -- -D warnings
 
-# Run the integration tests: a session drives the reference client.
+# Run the integration tests: a session drives the reference and layer clients.
 it:
-    cargo build -p fakeland-testclient
+    cargo build -p fakeland-testclient -p fakeland-layerclient
     cargo test --workspace -- --ignored --test-threads=1
 
 # Run an app headless and write a trace.
@@ -30,9 +30,9 @@ demo *cmd:
 viewer *cmd:
     cargo run -p fakeland-cli --features viewer -- run --viewer -- {{cmd}}
 
-# Build the fakeland, fakeland-mcp and reference client binaries.
+# Build the fakeland, fakeland-mcp, reference client and layer client binaries.
 build:
-    cargo build -p fakeland-cli -p fakeland-mcp -p fakeland-testclient
+    cargo build -p fakeland-cli -p fakeland-mcp -p fakeland-testclient -p fakeland-layerclient
 
 # Install the fakeland and fakeland-mcp binaries into ~/.cargo/bin, for example `just install --features viewer,nvml`.
 install *args:

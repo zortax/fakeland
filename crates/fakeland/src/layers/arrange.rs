@@ -3,7 +3,7 @@
 //! moves the toplevels of the output.
 
 use fakeland_types::{Logical, OutputId, Rect};
-use smithay::desktop::layer_map_for_output;
+use smithay::desktop::{LayerMap, layer_map_for_output};
 
 use crate::server::State;
 
@@ -11,12 +11,19 @@ impl State {
     /// Arranges the layer surfaces of an output. A changed work area moves the toplevels of the
     /// output.
     pub fn arrange_layers(&mut self, output: OutputId) {
+        self.change_layer_map(output, |_| {});
+    }
+
+    /// Changes the layer map of an output and arranges it. A changed work area moves the
+    /// toplevels of the output.
+    pub fn change_layer_map(&mut self, output: OutputId, change: impl FnOnce(&mut LayerMap)) {
         let Some(out) = self.outputs.get(output) else {
             return;
         };
         let (changed, before, after) = {
             let mut map = layer_map_for_output(&out.output);
             let before = map.non_exclusive_zone();
+            change(&mut map);
             let changed = map.arrange();
             (changed, before, map.non_exclusive_zone())
         };
