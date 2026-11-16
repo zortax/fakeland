@@ -9,17 +9,26 @@ use fakeland_types::{Logical, OutputId, Point, Rect};
 use crate::server::State;
 
 impl State {
-    /// Returns every mapped window as an accessibility window frame.
+    /// Returns every mapped window, layer surface and lock surface as an accessibility window
+    /// frame.
     pub fn a11y_windows(&self) -> Vec<WindowFrame> {
         self.window_infos()
             .into_iter()
             .filter(|w| w.is_mapped())
             .filter_map(|info| {
-                let rec = self.windows.get(info.id)?;
-                let geo = rec.window.geometry();
-                let bbox = rec.window.bbox();
-                let origin_x = info.geometry.x - geo.loc.x;
-                let origin_y = info.geometry.y - geo.loc.y;
+                let surface = match self.windows.get(info.id) {
+                    Some(rec) => {
+                        let geo = rec.window.geometry();
+                        let bbox = rec.window.bbox();
+                        Rect::new(
+                            info.geometry.x - geo.loc.x + bbox.loc.x,
+                            info.geometry.y - geo.loc.y + bbox.loc.y,
+                            bbox.size.w,
+                            bbox.size.h,
+                        )
+                    }
+                    None => info.geometry,
+                };
                 let scale = self
                     .outputs
                     .get(info.output)
@@ -32,12 +41,7 @@ impl State {
                     title: info.title,
                     app_id: info.app_id,
                     geometry: info.geometry,
-                    surface: Rect::new(
-                        origin_x + bbox.loc.x,
-                        origin_y + bbox.loc.y,
-                        bbox.size.w,
-                        bbox.size.h,
-                    ),
+                    surface,
                     scale,
                     focused: info.focused,
                 })

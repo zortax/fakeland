@@ -1,5 +1,6 @@
 //! The compositor state. One `State` lives on the compositor thread and owns every smithay object,
-//! every faked output, the frame pipeline, windows, processes, timers and the event bus.
+//! every faked output, the frame pipeline, windows, layer surfaces, the session lock, processes,
+//! timers and the event bus.
 
 use fakeland_trace::Event;
 use fakeland_types::{SharedClock, Timestamp};
@@ -16,6 +17,8 @@ use crate::framecap::FrameCaptures;
 use crate::frames::{Frames, Surfaces};
 use crate::input::{InputState, TextInputs};
 use crate::launch::Processes;
+use crate::layers::Layers;
+use crate::lock::SessionLock;
 use crate::marks::MarksServer;
 use crate::outputs::Outputs;
 use crate::protocols::Protocols;
@@ -58,6 +61,10 @@ pub struct State {
     pub frames: Frames,
     /// Toplevel windows.
     pub windows: Windows,
+    /// Layer-shell surfaces.
+    pub layers: Layers,
+    /// The session lock.
+    pub lock: SessionLock,
     /// Connected clients.
     pub clients: Clients,
     /// Launched processes and the private bus.

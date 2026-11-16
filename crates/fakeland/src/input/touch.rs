@@ -21,11 +21,7 @@ impl State {
         let touch = self.seat.get_touch().ok_or(InjectError::NoTouch)?;
         let (point, _) = self.resolve_position(pos)?;
         let focus = self.surface_under(point);
-        if let Some(window) = self.window_under(point)
-            && self.windows.focus != Some(window)
-        {
-            self.focus_window(Some(window));
-        }
+        self.focus_at(point);
         let (id, surface) = self.mark_input(focus.as_ref().map(|(s, _)| s), MarkKind::Touch);
         touch.down(
             self,

@@ -23,7 +23,9 @@ impl State {
         let Some(out) = self.outputs.get(rec.output) else {
             return;
         };
-        let out_rect = out.logical_rect();
+        let out_rect = self
+            .placement_area(rec.output, rec.placement)
+            .unwrap_or(out.logical_rect());
         let rect = placement_rect(rec.placement, out_rect, rec.floating);
         // A window takes focus when it maps, so it configures as activated until then.
         let focused = self.windows.focus == Some(id) || rec.mapped_at.is_none();
@@ -121,13 +123,13 @@ impl State {
         if rec.mapped_at.is_none() {
             return;
         }
-        let Some(out) = self.outputs.get(rec.output) else {
+        let Some(area) = self.placement_area(rec.output, rec.placement) else {
             return;
         };
         let size = rec.window.geometry().size;
         let origin = window_origin(
             rec.placement,
-            out.logical_rect(),
+            area,
             rec.floating,
             fakeland_types::Size::new(size.w, size.h),
         );
@@ -135,6 +137,19 @@ impl State {
         if self.space.element_location(&window) != Some(origin.into()) || activate {
             self.space.map_element(window, origin, activate);
             self.space_dirty = true;
+        }
+    }
+
+    /// Returns the area of an output that a placement fills: the whole output for fullscreen, else
+    /// the work area that the exclusive zones of layer surfaces leave free.
+    pub fn placement_area(
+        &self,
+        output: fakeland_types::OutputId,
+        placement: Placement,
+    ) -> Option<fakeland_types::Rect<fakeland_types::Logical>> {
+        match placement {
+            Placement::Fullscreen => self.outputs.get(output).map(|o| o.logical_rect()),
+            Placement::Maximized | Placement::Floating => self.work_area(output),
         }
     }
 

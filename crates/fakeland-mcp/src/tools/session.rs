@@ -165,7 +165,7 @@ impl FakelandMcp {
 
     /// Lists windows, outputs and apps.
     #[tool(
-        description = "List the windows (id, app_id, title, logical geometry, focus), the outputs and the launched apps."
+        description = "List the windows (id, app_id, title, logical geometry, focus), the layer-shell surfaces (namespace, layer, keyboard mode, exclusive zone, anchors) and lock surfaces, the outputs and the launched apps."
     )]
     async fn list_windows(&self, Parameters(_): Parameters<NoArgs>) -> ToolResult {
         finish(
@@ -181,7 +181,7 @@ impl FakelandMcp {
 
     /// Focuses a window.
     #[tool(
-        description = "Give a window keyboard focus and raise it. window: focused, any, an id such as 3, app:APP_ID or title:REGEX."
+        description = "Give a window keyboard focus and raise it. window: focused, any, an id such as 3, app:APP_ID, title:REGEX, layer:NAMESPACE or lock. A layer surface takes focus only with keyboard interactivity."
     )]
     async fn focus_window(&self, Parameters(p): Parameters<WindowParams>) -> ToolResult {
         finish(

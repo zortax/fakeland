@@ -15,7 +15,7 @@ mod toplevel;
 mod tree;
 mod windows;
 
-pub use info::{Placement, WindowInfo};
+pub use info::{KeyboardMode, LayerInfo, Placement, ShellLayer, WindowInfo, WindowKind};
 pub use layout::{cascade, initial_layout, placement_rect, window_origin};
 pub use matcher::{MatchError, WindowMatcher};
 pub use ops::{WindowOp, WindowOpError};

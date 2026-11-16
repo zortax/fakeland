@@ -225,6 +225,8 @@ fn init(config: SessionConfig, clock: SharedClock) -> Result<Parts, StartError> 
         surfaces: Surfaces::default(),
         frames: Frames::default(),
         windows: Windows::new(default_cursor()),
+        layers: Default::default(),
+        lock: Default::default(),
         clients: Clients::default(),
         processes: Processes::new(exits_tx, dbus, config.log_capacity),
         timers: Timers::default(),

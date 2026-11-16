@@ -1,5 +1,6 @@
 //! Preferred scale and transform of surfaces: the fractional scale of `wp_fractional_scale_v1` and
-//! the integer buffer scale and transform of `wl_surface` version 6, from the output of the window.
+//! the integer buffer scale and transform of `wl_surface` version 6, from the output of the window,
+//! layer surface or lock surface.
 
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
@@ -12,18 +13,22 @@ use crate::outputs::smithay_transform;
 use crate::server::State;
 
 impl State {
-    /// Returns the output of a surface: the output of its window, or the primary output.
+    /// Returns the output of a surface: the output of its window, layer surface or lock surface,
+    /// or the primary output.
     fn surface_scale_output(
         &self,
         surface: &WlSurface,
     ) -> Option<(f64, fakeland_scenario::Transform)> {
         let output = self
-            .window_of_surface(surface)
-            .and_then(|w| self.windows.get(w))
-            .map(|w| w.output)
+            .home_output(surface)
             .or_else(|| self.outputs.primary())?;
         let o = self.outputs.get(output)?;
         Some((o.config.scale, o.config.transform))
+    }
+
+    /// Returns the output of the window, layer surface or lock surface of a surface.
+    pub fn home_output(&self, surface: &WlSurface) -> Option<fakeland_types::OutputId> {
+        self.window_output(self.window_of_surface(surface)?)
     }
 
     /// Sends the preferred scale and transform of one surface.

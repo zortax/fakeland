@@ -22,7 +22,8 @@ pub struct Region {
 /// A screenshot request.
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct ScreenshotParams {
-    /// Capture only this window: `focused`, `any`, an id, `app:APP_ID` or `title:REGEX`.
+    /// Capture only this window: `focused`, `any`, an id, `app:APP_ID`, `title:REGEX`,
+    /// `layer:NAMESPACE` or `lock`.
     #[serde(default)]
     pub window: Option<String>,
     /// Capture this output id. The default is the primary output.
@@ -48,7 +49,7 @@ pub struct ScreenshotParams {
 #[derive(Clone, Copy, Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum WaitKind {
-    /// A mapped window that matches `window` (default any).
+    /// A mapped window, layer surface or lock surface that matches `window` (default any).
     Window,
     /// No new content in `window` for `quiet_ms`.
     Settled,
@@ -65,7 +66,8 @@ pub enum WaitKind {
 pub struct WaitForParams {
     /// What to wait for.
     pub until: WaitKind,
-    /// The window: `focused`, `any`, an id, `app:APP_ID` or `title:REGEX`.
+    /// The window: `focused`, `any`, an id, `app:APP_ID`, `title:REGEX`, `layer:NAMESPACE` or
+    /// `lock`.
     #[serde(default)]
     pub window: Option<String>,
     /// The longest wait in milliseconds.

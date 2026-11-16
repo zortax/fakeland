@@ -83,6 +83,12 @@ impl State {
         if let Some(window) = self.windows.by_surface(rec.id) {
             self.forget_window(window);
         }
+        if let Some(layer) = self.layers.by_surface(rec.id) {
+            self.forget_layer(layer);
+        }
+        if let Some(lock) = self.lock.by_surface(rec.id) {
+            self.forget_lock_surface(lock);
+        }
         if matches!(&self.windows.cursor.image, CursorImageStatus::Surface(s) if s == surface) {
             self.windows.cursor.image = CursorImageStatus::default_named();
         }
@@ -131,15 +137,14 @@ impl State {
     }
 
     /// Returns the output whose scheduler takes the commits of a surface. A surface follows the
-    /// window of its root; other surfaces stay on the output they first used. A change of output
+    /// window, layer surface or lock surface of its root; other surfaces stay on the output they
+    /// first used. A change of output
     /// ends the entries on the old one.
     pub fn surface_output(&mut self, surface: &WlSurface, sid: SurfaceId) -> OutputId {
         let previous = self.surfaces.get(sid).and_then(|r| r.output);
         let fallback = self.outputs.primary().unwrap_or(OutputId(0));
         let target = self
-            .window_of_surface(surface)
-            .and_then(|w| self.windows.get(w))
-            .map(|w| w.output)
+            .home_output(surface)
             .filter(|o| self.outputs.get(*o).is_some())
             .or(previous.filter(|o| self.outputs.get(*o).is_some()))
             .unwrap_or(fallback);

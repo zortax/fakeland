@@ -14,6 +14,9 @@ impl State {
     /// Runs the shell logic of an applied commit.
     pub fn shell_committed(&mut self, surface: &WlSurface) {
         self.popups.commit(surface);
+        if self.layer_committed(surface) || self.lock_committed(surface) {
+            return;
+        }
         if let Some(PopupKind::Xdg(popup)) = self.popups.find_popup(surface)
             && !popup.is_initial_configure_sent()
             && let Err(e) = popup.send_configure()
@@ -57,18 +60,18 @@ impl State {
         let (app_id, title) = (rec.app_id.clone(), rec.title.clone());
         let wl = rec.toplevel.wl_surface().clone();
         let size = rec.window.geometry().size;
+        let (placement, floating) = (rec.placement, rec.floating);
         let origin = self
-            .outputs
-            .get(output)
-            .map(|o| {
+            .placement_area(output, placement)
+            .map(|area| {
                 window_origin(
-                    rec.placement,
-                    o.logical_rect(),
-                    rec.floating,
+                    placement,
+                    area,
+                    floating,
                     fakeland_types::Size::new(size.w, size.h),
                 )
             })
-            .unwrap_or((rec.floating.x, rec.floating.y));
+            .unwrap_or((floating.x, floating.y));
         self.space.map_element(window, origin, true);
         self.space_dirty = true;
         self.emit(Event::WindowMapped {
@@ -96,7 +99,7 @@ impl State {
         self.emit(Event::WindowUnmapped { window: id });
         if self.windows.focus == Some(id) {
             let next = self.windows.previous_focus(Some(id));
-            self.focus_window(next);
+            self.set_window_focus(next);
         }
     }
 }

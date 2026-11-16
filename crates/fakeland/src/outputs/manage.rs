@@ -1,5 +1,5 @@
 //! Output management on the compositor thread: hotplug, runtime changes, manual steps and the
-//! relayout of the windows of a changed output.
+//! relayout of the windows, layer surfaces and lock surfaces of a changed output.
 
 use fakeland_timing::{ScheduleError, TimingMode};
 use fakeland_trace::Event;
@@ -82,6 +82,8 @@ impl State {
                 rec.output = None;
             }
         }
+        self.close_output_layers(id);
+        self.close_output_locks(id);
         let Some(out) = self.outputs.remove(id) else {
             return Err(OutputError::NoOutput(id));
         };
@@ -165,8 +167,16 @@ impl State {
         Ok(())
     }
 
-    /// Re-applies the placement and scale of every window on an output.
+    /// Arranges the layer surfaces of an output, resizes its lock surfaces and re-applies the
+    /// placement and scale of every window on it.
     pub fn relayout_output(&mut self, id: OutputId) {
+        self.arrange_layers(id);
+        self.resize_output_locks(id);
+        for l in self.layers.on_output(id) {
+            if let Some(surface) = self.layers.get(l).map(|r| r.layer.wl_surface().clone()) {
+                self.send_tree_scale(&surface);
+            }
+        }
         for w in self.windows.on_output(id) {
             self.relayout_window(w);
             if let Some(surface) = self.windows.get(w).map(|r| r.toplevel.wl_surface().clone()) {

@@ -15,12 +15,13 @@ use smithay::backend::renderer::{ExportMem, Renderer};
 use smithay::desktop::Window;
 use smithay::reexports::pixman;
 use smithay::utils::{Physical, Point, Rectangle, Size};
+use smithay::wayland::compositor::{SurfaceData, TraversalAction, with_surface_tree_downward};
 use smithay::wayland::shm::with_buffer_contents;
 
 use super::CaptureError;
 use super::service::{Plan, Scene};
 use crate::render::{
-    CursorScene, Readback, RenderBackend, WindowScene, collect, copy_rows, create_target,
+    CursorScene, Overlays, Readback, RenderBackend, WindowScene, collect, copy_rows, create_target,
     into_image, map, render,
 };
 use crate::server::State;
@@ -78,8 +79,8 @@ pub(super) struct Started {
 }
 
 impl State {
-    /// Returns the pixel count of the shm buffers in the scene of a plan that have no GLES
-    /// texture. The render step of a capture uploads them.
+    /// Returns the pixel count of the shm buffers in the scene of a plan, layer and lock surfaces
+    /// included, that have no GLES texture. The render step of a capture uploads them.
     pub(super) fn pending_upload_pixels(&mut self, plan: &Plan) -> u64 {
         let RenderBackend::Gles(dev) = &mut self.render else {
             return 0;
@@ -103,22 +104,47 @@ impl State {
                 .cloned()
                 .collect(),
             Scene::Window(w, _) => vec![w.clone()],
+            Scene::Shell(_) => Vec::new(),
+        };
+        let overlays = match &plan.scene {
+            Scene::Space => self.overlays(),
+            Scene::Window(..) => Overlays::default(),
+            Scene::Shell(o) => o.clone(),
         };
         let mut pixels = 0;
-        for window in &windows {
-            window.with_surfaces(|_, states| {
-                let Some(data) = states.data_map.get::<RendererSurfaceStateUserData>() else {
-                    return;
-                };
-                let Ok(state) = data.lock() else { return };
-                let Some(buffer) = state.buffer() else { return };
-                if state.texture::<GlesTexture>(context.clone()).is_some() {
-                    return;
+        let mut count = |states: &SurfaceData| {
+            let Some(data) = states.data_map.get::<RendererSurfaceStateUserData>() else {
+                return;
+            };
+            let Ok(state) = data.lock() else { return };
+            let Some(buffer) = state.buffer() else { return };
+            if state.texture::<GlesTexture>(context.clone()).is_some() {
+                return;
+            }
+            if let Ok((w, h)) = with_buffer_contents(buffer, |_, _, d| (d.width, d.height)) {
+                pixels += w.max(0) as u64 * h.max(0) as u64;
+            }
+        };
+        match &overlays.lock {
+            Some(lock) => {
+                for s in &lock.surfaces {
+                    with_surface_tree_downward(
+                        &s.surface,
+                        (),
+                        |_, _, _| TraversalAction::DoChildren(()),
+                        |_, states, _| count(states),
+                        |_, _, _| true,
+                    );
                 }
-                if let Ok((w, h)) = with_buffer_contents(buffer, |_, _, d| (d.width, d.height)) {
-                    pixels += w.max(0) as u64 * h.max(0) as u64;
+            }
+            None => {
+                for window in &windows {
+                    window.with_surfaces(|_, states| count(states));
                 }
-            });
+                for layer in overlays.above.iter().chain(&overlays.below) {
+                    layer.surface.with_surfaces(|_, states| count(states));
+                }
+            }
         }
         pixels
     }
@@ -147,9 +173,14 @@ impl State {
             default: &self.windows.cursor.default,
             default_hotspot: Point::default(),
         });
+        let overlays = match &plan.scene {
+            Scene::Space => self.overlays(),
+            _ => Overlays::default(),
+        };
         let scene = match &plan.scene {
-            Scene::Space => WindowScene::Space(&self.space),
+            Scene::Space => WindowScene::Space(&self.space, &overlays),
             Scene::Window(w, loc) => WindowScene::Single(w, *loc),
+            Scene::Shell(o) => WindowScene::Overlays(o),
         };
         let targets = &mut self.capture_targets;
         let clock = self.clock.clone();

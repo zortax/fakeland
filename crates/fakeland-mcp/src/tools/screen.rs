@@ -61,7 +61,7 @@ impl FakelandMcp {
 
     /// Waits on the compositor.
     #[tool(
-        description = "Wait on the compositor until: window (a window maps), settled (no new frame for quiet_ms), frames (n presented frames), pixels_stable (region unchanged for frames refreshes), or pixels_match (region meets condition). Fails after timeout_ms."
+        description = "Wait on the compositor until: window (a window maps; window=layer:NAMESPACE waits for a layer surface, lock for a lock surface), settled (no new frame for quiet_ms), frames (n presented frames), pixels_stable (region unchanged for frames refreshes), or pixels_match (region meets condition). Fails after timeout_ms."
     )]
     async fn wait_for(&self, Parameters(p): Parameters<WaitForParams>) -> ToolResult {
         finish(

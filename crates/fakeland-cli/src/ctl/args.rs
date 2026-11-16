@@ -319,7 +319,7 @@ pub enum CtlCommand {
 pub enum WaitCommand {
     /// Wait for a mapped window.
     Window {
-        /// The window: focused, any, ID, app:APP_ID or title:REGEX.
+        /// The window: focused, any, ID, app:APP_ID, title:REGEX, layer:NAMESPACE or lock.
         #[arg(default_value = "any")]
         window: String,
         /// The longest wait.

@@ -160,13 +160,14 @@ impl State {
             default: &self.windows.cursor.default,
             default_hotspot: Default::default(),
         };
+        let overlays = self.overlays();
         let crate::render::RenderBackend::Gles(dev) = &mut self.render else {
             return Err("the Pixman renderer has no dmabufs".into());
         };
         let renderer = dev.renderer().ok_or("no GLES renderer")?;
         let elements = collect(
             renderer,
-            &WindowScene::Space(&self.space),
+            &WindowScene::Space(&self.space, &overlays),
             rect,
             composer.scale,
             Some(&cursor),

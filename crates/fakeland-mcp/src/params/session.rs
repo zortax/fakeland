@@ -46,7 +46,8 @@ pub struct LaunchParams {
 /// A window.
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct WindowParams {
-    /// The window: `focused`, `any`, a window id such as `3`, `app:APP_ID` or `title:REGEX`.
+    /// The window: `focused`, `any`, a window id such as `3`, `app:APP_ID`, `title:REGEX`,
+    /// `layer:NAMESPACE` or `lock`.
     pub window: String,
 }
 

@@ -21,6 +21,8 @@ use smithay::wayland::presentation::PresentationState;
 use smithay::wayland::relative_pointer::RelativePointerManagerState;
 use smithay::wayland::selection::data_device::DataDeviceState;
 use smithay::wayland::selection::primary_selection::PrimarySelectionState;
+use smithay::wayland::session_lock::SessionLockManagerState;
+use smithay::wayland::shell::wlr_layer::WlrLayerShellState;
 use smithay::wayland::shell::xdg::XdgShellState;
 use smithay::wayland::shell::xdg::decoration::XdgDecorationState;
 use smithay::wayland::shm::ShmState;
@@ -45,6 +47,8 @@ pub struct Protocols {
     pub compositor: CompositorState,
     pub xdg_shell: XdgShellState,
     pub xdg_decoration: XdgDecorationState,
+    pub layer_shell: WlrLayerShellState,
+    pub session_lock: SessionLockManagerState,
     pub shm: ShmState,
     pub dmabuf: DmabufState,
     pub dmabuf_global: Option<DmabufGlobal>,
