@@ -102,6 +102,10 @@ pub struct Args {
     /// The popup fill color.
     #[arg(long, default_value = "#e06020", value_parser = parse_color)]
     pub popup_color: ColorArg,
+    /// Unmap the layer surface at a button press on it, and map it again at once in the popup
+    /// color.
+    #[arg(long)]
+    pub remap_on_press: bool,
     /// Unlock the session at the first button or key press.
     #[arg(long)]
     pub unlock_on_input: bool,

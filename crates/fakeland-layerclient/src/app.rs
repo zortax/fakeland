@@ -103,6 +103,8 @@ pub struct App {
     pub pointer_surface: Option<String>,
     /// The client unlocked and locked again.
     pub relocked: bool,
+    /// The layer surface was unmapped and mapped again.
+    pub remapped: bool,
     /// The lock timers run.
     pub timers_started: bool,
     /// The client is done.
@@ -138,6 +140,7 @@ impl App {
             pointer: (0.0, 0.0),
             pointer_surface: None,
             relocked: false,
+            remapped: false,
             timers_started: false,
             done: false,
         };

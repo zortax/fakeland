@@ -89,6 +89,12 @@ impl Dispatch<WlPointer, ()> for App {
                 if pressed {
                     app.lock_input(qh);
                 }
+                if pressed
+                    && app.args.remap_on_press
+                    && app.pointer_surface.as_deref() == Some("layer")
+                {
+                    app.remap_layer();
+                }
                 let on_parent =
                     matches!(app.pointer_surface.as_deref(), Some("layer" | "toplevel"));
                 if pressed && app.args.popup_grab && app.popup.is_none() && on_parent {

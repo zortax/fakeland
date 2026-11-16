@@ -1,4 +1,4 @@
-//! The layer surface: creation with the requested state, configures and close.
+//! The layer surface: creation with the requested state, a new mapping, configures and close.
 
 use serde_json::json;
 use wayland_client::{Connection, Dispatch, QueueHandle};
@@ -43,6 +43,19 @@ impl App {
         self.layer = Some((surface, ls));
         true
     }
+
+    /// Unmaps the layer surface with a null buffer and makes the initial commit of a new
+    /// mapping. The configure that answers it draws the surface in the popup color.
+    pub fn remap_layer(&mut self) {
+        let Some((surface, _)) = &self.layer else {
+            return;
+        };
+        surface.attach(None, 0, 0);
+        surface.commit();
+        surface.commit();
+        self.remapped = true;
+        log::event("remapped", json!({}));
+    }
 }
 
 fn anchor(edges: &[String]) -> zwlr_layer_surface_v1::Anchor {
@@ -78,8 +91,13 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for App {
                 let w = if width == 0 { app.args.size.0 } else { width };
                 let h = if height == 0 { app.args.size.1 } else { height };
                 let first = app.popup.is_none() && !app.args.popup_grab;
+                let color = if app.remapped {
+                    app.args.popup_color
+                } else {
+                    app.args.color
+                };
                 if let Some((surface, _)) = &app.layer
-                    && let Err(e) = app.draw(surface, w.max(1), h.max(1), app.args.color, qh)
+                    && let Err(e) = app.draw(surface, w.max(1), h.max(1), color, qh)
                 {
                     eprintln!("fakeland-layerclient: {e}");
                 }
