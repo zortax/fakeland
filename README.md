@@ -40,6 +40,11 @@ behind it. The app cannot tell the difference:
   same timeline, for exact latency attribution.
 - **Isolation.** Each session has its own socket, a private D-Bus bus and a
   process group, so apps never reach the host desktop.
+- **Desktop shells too.** Layer-shell surfaces (`zwlr_layer_shell_v1`) and the
+  session lock (`ext_session_lock_v1`) work like on a desktop compositor:
+  exclusive zones shrink the work area of windows, layers stack around the
+  windows, and bars, launchers, notifications and lock screens show up in
+  window lists, screenshots and input by coordinates.
 - **Headless by default.** A nested viewer window is available to watch the
   session.
 
@@ -86,6 +91,8 @@ A cargo workspace under `crates/`:
 - `fakeland-protocol`, `fakeland-marks`: the app-mark protocol and its client
   library.
 - `fakeland-testclient`: reference client for measurement tests.
+- `fakeland-layerclient`: layer-shell, session-lock and toplevel client for
+  shell tests.
 - `fakeland-a11y`: accessibility tree access.
 
 `examples/` holds runnable examples of the library.

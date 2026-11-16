@@ -5,7 +5,7 @@
 
 mod support;
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use fakeland::{
     App, CaptureOptions, CaptureTarget, Fakeland, KeyboardMode, LaunchSpec, OutputConfig, Session,
@@ -57,21 +57,23 @@ fn events(app: &App) -> Vec<Value> {
         .collect()
 }
 
-/// Waits until a client logged an event that matches.
-fn wait_event(app: &App, what: &str, f: impl Fn(&Value) -> bool) -> Value {
-    let deadline = Instant::now() + Duration::from_secs(5);
-    loop {
-        if let Some(e) = events(app).into_iter().find(|e| f(e)) {
-            return e;
+/// Polls a condition every 20 ms for up to 5 s and returns its first value.
+fn poll<T>(what: impl Fn() -> String, mut f: impl FnMut() -> Option<T>) -> T {
+    for _ in 0..250 {
+        if let Some(v) = f() {
+            return v;
         }
-        assert!(
-            Instant::now() < deadline,
-            "no {what} event: {}\n{}",
-            app.stdout(),
-            app.stderr()
-        );
         std::thread::sleep(Duration::from_millis(20));
     }
+    panic!("{}", what())
+}
+
+/// Waits until a client logged an event that matches.
+fn wait_event(app: &App, what: &str, f: impl Fn(&Value) -> bool) -> Value {
+    poll(
+        || format!("no {what} event: {}\n{}", app.stdout(), app.stderr()),
+        || events(app).into_iter().find(|e| f(e)),
+    )
 }
 
 fn is(e: &Value, event: &str) -> bool {
@@ -84,17 +86,15 @@ fn count(app: &App, f: impl Fn(&Value) -> bool) -> usize {
 
 /// Waits until a window matches a condition.
 fn wait_info(session: &Session, id: WindowRef, f: impl Fn(&WindowInfo) -> bool) -> WindowInfo {
-    let deadline = Instant::now() + Duration::from_secs(5);
-    loop {
-        let w = session
-            .blocking_wait_window(id.clone(), Nanos::from_secs(5))
-            .expect("window");
-        if f(&w) {
-            return w;
-        }
-        assert!(Instant::now() < deadline, "window never matched: {w:?}");
-        std::thread::sleep(Duration::from_millis(20));
-    }
+    poll(
+        || format!("{id:?} never matched"),
+        || {
+            session
+                .blocking_wait_window(id.clone(), Nanos::from_secs(5))
+                .ok()
+                .filter(|w| f(w))
+        },
+    )
 }
 
 fn pixel_at(session: &Session, x: u32, y: u32) -> [u8; 3] {
@@ -411,11 +411,10 @@ fn the_lock_hides_everything_until_unlock() {
     wait_event(&lock, "unlocked", |e| is(e, "unlocked"));
     let back = wait_info(&s, WindowRef::id(window.id), |w| w.focused);
     assert!(back.focused);
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while pixel_at(&s, 640, 20) != [255, 0, 0] {
-        assert!(Instant::now() < deadline, "the bar shows after unlock");
-        std::thread::sleep(Duration::from_millis(20));
-    }
+    poll(
+        || "the bar shows after unlock".to_owned(),
+        || (pixel_at(&s, 640, 20) == [255, 0, 0]).then_some(()),
+    );
     s.blocking_shutdown().expect("shutdown");
 }
 

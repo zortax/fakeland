@@ -15,7 +15,7 @@ impl State {
         self.window_infos()
             .into_iter()
             .filter(|w| w.is_mapped())
-            .filter_map(|info| {
+            .map(|info| {
                 let surface = match self.windows.get(info.id) {
                     Some(rec) => {
                         let geo = rec.window.geometry();
@@ -34,7 +34,7 @@ impl State {
                     .get(info.output)
                     .map(|o| o.config.scale)
                     .unwrap_or(1.0);
-                Some(WindowFrame {
+                WindowFrame {
                     id: info.id,
                     pid: info.pid,
                     app: info.app,
@@ -44,7 +44,7 @@ impl State {
                     surface,
                     scale,
                     focused: info.focused,
-                })
+                }
             })
             .collect()
     }

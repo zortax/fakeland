@@ -75,6 +75,7 @@ impl State {
             app: pid.and_then(|p| self.processes.root_of(p)),
         });
         self.surface_role(&wl, "ext_session_lock_surface_v1", None);
+        self.send_tree_scale(&wl);
     }
 
     /// Runs the shell logic of an applied commit of a lock surface. Returns false when the

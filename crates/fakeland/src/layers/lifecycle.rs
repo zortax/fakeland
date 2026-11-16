@@ -55,6 +55,7 @@ impl State {
             app: pid.and_then(|p| self.processes.root_of(p)),
         });
         self.surface_role(&wl, "zwlr_layer_surface_v1", None);
+        self.send_tree_scale(&wl);
     }
 
     /// Runs the shell logic of an applied commit of a layer surface root. Returns false when the
