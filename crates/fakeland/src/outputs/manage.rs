@@ -91,6 +91,7 @@ impl State {
         }
         self.close_output_layers(id);
         self.close_output_locks(id);
+        self.close_output_gamma(id);
         let Some(out) = self.outputs.remove(id) else {
             return Err(OutputError::NoOutput(id));
         };

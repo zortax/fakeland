@@ -76,6 +76,7 @@ impl Event {
             Self::ProcessDetail { .. } => "process_detail",
             Self::GpuProcessSample { .. } => "gpu_process_sample",
             Self::EnergySample { .. } => "energy_sample",
+            Self::Gamma { .. } => "gamma",
             Self::Unknown => "unknown",
         }
     }
@@ -251,6 +252,10 @@ mod tests {
             Event::EnergySample {
                 domain: "cpu-package-0".into(),
                 microjoules_total: 9,
+            },
+            Event::Gamma {
+                output: OutputId(1),
+                top: Some([65535, 52000, 40000]),
             },
         ];
         for e in events {

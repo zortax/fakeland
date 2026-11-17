@@ -14,6 +14,7 @@ mod decoration;
 mod dmabuf;
 mod fifo;
 mod fractional_scale;
+mod gamma_control;
 mod globals;
 mod idle_inhibit;
 mod input_method;
@@ -43,6 +44,7 @@ mod xdg_activation;
 mod xdg_foreign;
 mod xdg_shell;
 
+pub use gamma_control::GammaControlState;
 pub use state::Protocols;
 pub use tearing_control::TearingControlState;
 pub use text_input::create_text_input_global;

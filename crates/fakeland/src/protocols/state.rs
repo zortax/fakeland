@@ -34,7 +34,7 @@ use smithay::wayland::xdg_foreign::XdgForeignState;
 use smithay::wayland::xdg_system_bell::XdgSystemBellState;
 use smithay::wayland::xdg_toplevel_tag::XdgToplevelTagManager;
 
-use super::TearingControlState;
+use super::{GammaControlState, TearingControlState};
 use crate::server::State;
 
 /// Every protocol state of the compositor.
@@ -68,6 +68,7 @@ pub struct Protocols {
     pub alpha_modifier: AlphaModifierState,
     pub content_type: ContentTypeState,
     pub tearing_control: TearingControlState,
+    pub gamma_control: GammaControlState,
     pub cursor_shape: CursorShapeManagerState,
     pub relative_pointer: RelativePointerManagerState,
     pub pointer_constraints: PointerConstraintsState,

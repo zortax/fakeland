@@ -38,7 +38,7 @@ use smithay::wayland::xdg_foreign::XdgForeignState;
 use smithay::wayland::xdg_system_bell::XdgSystemBellState;
 use smithay::wayland::xdg_toplevel_tag::XdgToplevelTagManager;
 
-use super::{Protocols, TearingControlState, create_text_input_global};
+use super::{GammaControlState, Protocols, TearingControlState, create_text_input_global};
 use crate::render::RenderBackend;
 use crate::server::State;
 
@@ -98,6 +98,7 @@ impl Protocols {
             alpha_modifier: AlphaModifierState::new::<State>(dh),
             content_type: ContentTypeState::new::<State>(dh),
             tearing_control: TearingControlState::new(dh),
+            gamma_control: GammaControlState::new(dh),
             cursor_shape: CursorShapeManagerState::new::<State>(dh),
             relative_pointer: RelativePointerManagerState::new::<State>(dh),
             pointer_constraints: PointerConstraintsState::new::<State>(dh),
