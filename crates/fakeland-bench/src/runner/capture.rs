@@ -41,7 +41,7 @@ pub(crate) fn resolve(spec: &CaptureSpec, window: Option<&WindowInfo>) -> Captur
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fakeland::Placement;
+    use fakeland::{Placement, WindowKind};
     use fakeland_types::{OutputId, Rect, SurfaceId, WindowId};
 
     #[test]
@@ -59,6 +59,8 @@ mod tests {
             focused: true,
             suspended: false,
             placement: Placement::Maximized,
+            kind: WindowKind::Toplevel,
+            layer: None,
         };
         let spec = CaptureSpec::every_presented(WindowRef::Focused)
             .with_downscale(2)

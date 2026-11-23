@@ -172,7 +172,7 @@ impl Accessibility {
         let pos = session
             .inner
             .call(move |state| {
-                let fallback = window.and_then(|w| state.windows.get(w)).map(|r| r.output);
+                let fallback = window.and_then(|w| state.window_output(w));
                 state.global_to_position(center, fallback)
             })
             .await?;

@@ -1,5 +1,5 @@
 //! Resolution of symbolic positions to points in the global logical space. Window positions use
-//! the window geometry at the moment the event runs.
+//! the geometry of the window, layer surface or lock surface at the moment the event runs.
 
 use fakeland_scenario::Position;
 use fakeland_types::OutputId;
@@ -27,15 +27,13 @@ impl State {
             } => self.output_point(*output, x * scale, y * scale),
             Position::Window { window, x, y } => {
                 let id = self.resolve_window(window)?.ok_or(InjectError::NoWindow)?;
-                let rec = self.windows.get(id).ok_or(InjectError::NoWindow)?;
-                let info = self.window_info(rec);
+                let info = self.info_of(id).ok_or(InjectError::NoWindow)?;
                 let g = info.geometry;
                 Ok((Point::from((g.x as f64 + x, g.y as f64 + y)), info.output))
             }
             Position::WindowFraction { window, fx, fy } => {
                 let id = self.resolve_window(window)?.ok_or(InjectError::NoWindow)?;
-                let rec = self.windows.get(id).ok_or(InjectError::NoWindow)?;
-                let info = self.window_info(rec);
+                let info = self.info_of(id).ok_or(InjectError::NoWindow)?;
                 let g = info.geometry;
                 Ok((
                     Point::from((g.x as f64 + fx * g.w as f64, g.y as f64 + fy * g.h as f64)),

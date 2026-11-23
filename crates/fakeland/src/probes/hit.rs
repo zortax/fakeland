@@ -1,10 +1,11 @@
 //! Pixel tests of candidate buffers and the record of a detection. A detection follows its
-//! commit to the presentation, or finishes at once when the commit is already on screen.
+//! commit to the presentation, or finishes at once when the commit is already on screen. The
+//! buffer of a surface that has no place yet waits for the map of its surface.
 
 use fakeland_trace::Event;
 use fakeland_types::{CommitId, SurfaceId, Timestamp};
 
-use super::queue::Candidate;
+use super::queue::{Candidate, enqueue};
 use super::readback::committed_placement;
 use super::run::{CommitLog, Repeat, Shared};
 use crate::server::State;
@@ -13,7 +14,9 @@ use crate::waits::changed_fraction;
 use super::detect::{Goal, Step, surface_origin};
 
 /// Reads back the region of a candidate buffer. A candidate from before the input becomes the
-/// baseline of its surface; any other candidate goes through the pixel detector.
+/// baseline of its surface; any other candidate goes through the pixel detector. A candidate of a
+/// surface without a place, such as the first buffer of a layer that maps at its latch, waits for
+/// [`placed`].
 pub(super) fn test_candidate(state: &mut State, run: &Shared, c: Candidate) -> Step {
     let Candidate {
         commit,
@@ -21,6 +24,15 @@ pub(super) fn test_candidate(state: &mut State, run: &Shared, c: Candidate) -> S
         t,
         baseline: is_baseline,
     } = c;
+    let Some(origin) = surface_origin(state, surface) else {
+        if !is_baseline
+            && let Some(rep) = run.borrow_mut().repeat.as_mut()
+            && rep.watch.stash.contains_key(&commit)
+        {
+            rep.watch.unplaced.push(c);
+        }
+        return Step::Continue;
+    };
     let (buffer, info, roi, baseline) = {
         let mut r = run.borrow_mut();
         let Some(rep) = r.repeat.as_mut().filter(|rep| !rep.finished) else {
@@ -40,9 +52,6 @@ pub(super) fn test_candidate(state: &mut State, run: &Shared, c: Candidate) -> S
             return Step::Continue;
         };
         (buffer, info, roi, w.baselines.get(&surface).cloned())
-    };
-    let Some(origin) = surface_origin(state, surface) else {
-        return Step::Continue;
     };
     let placement = committed_placement(&info, origin);
     let Some(read) = state.read_region(&buffer, &placement, roi) else {
@@ -73,6 +82,27 @@ pub(super) fn test_candidate(state: &mut State, run: &Shared, c: Candidate) -> S
     };
     if hit {
         return detect(state, run, commit, surface, t);
+    }
+    Step::Continue
+}
+
+/// Queues again the candidates of `surface` that waited for it to map.
+pub(super) fn placed(state: &mut State, run: &Shared, surface: SurfaceId) -> Step {
+    let waiting: Vec<Candidate> = {
+        let mut r = run.borrow_mut();
+        let Some(rep) = r.repeat.as_mut().filter(|rep| !rep.finished) else {
+            return Step::Continue;
+        };
+        let (mine, rest) = std::mem::take(&mut rep.watch.unplaced)
+            .into_iter()
+            .partition(|c| c.surface == surface);
+        rep.watch.unplaced = rest;
+        mine
+    };
+    for c in waiting {
+        if enqueue(state, run, c) == Step::Finished {
+            return Step::Finished;
+        }
     }
     Step::Continue
 }

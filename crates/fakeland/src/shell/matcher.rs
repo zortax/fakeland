@@ -1,10 +1,11 @@
-//! Window selection by `WindowRef`: id, app id, title pattern, focus or any mapped window.
+//! Window selection by `WindowRef`: id, app id, title pattern, layer namespace, lock surface,
+//! focus or any mapped window.
 
 use fakeland_scenario::WindowRef;
 use regex::Regex;
 use thiserror::Error;
 
-use super::WindowInfo;
+use super::{WindowInfo, WindowKind};
 
 /// A matcher that cannot run.
 #[derive(Debug, Error)]
@@ -24,8 +25,12 @@ pub enum MatchError {
 pub enum WindowMatcher {
     /// Matches a window id.
     Id(fakeland_types::WindowId),
-    /// Matches an app id exactly.
+    /// Matches an app id or a layer namespace exactly.
     AppId(String),
+    /// Matches a layer namespace exactly.
+    Layer(String),
+    /// Matches a lock surface.
+    Lock,
     /// Matches a title pattern.
     Title(Regex),
     /// Matches the focused window.
@@ -46,6 +51,8 @@ impl WindowMatcher {
                     source,
                 })?)
             }
+            WindowRef::Layer { namespace } => Self::Layer(namespace.clone()),
+            WindowRef::Lock => Self::Lock,
             WindowRef::Focused => Self::Focused,
             WindowRef::Any => Self::Any,
         })
@@ -56,7 +63,12 @@ impl WindowMatcher {
         match self {
             Self::Id(id) => w.id == *id,
             _ if !w.is_mapped() => false,
-            Self::AppId(app_id) => w.app_id == *app_id,
+            Self::AppId(app_id) => match w.kind {
+                WindowKind::Toplevel => w.app_id == *app_id,
+                _ => w.namespace() == Some(app_id.as_str()),
+            },
+            Self::Layer(namespace) => w.namespace() == Some(namespace.as_str()),
+            Self::Lock => w.kind == WindowKind::Lock,
             Self::Title(re) => re.is_match(&w.title),
             Self::Focused => w.focused,
             Self::Any => true,
@@ -74,7 +86,7 @@ mod tests {
     use fakeland_types::{OutputId, Rect, SurfaceId, Timestamp, WindowId};
 
     use super::*;
-    use crate::shell::Placement;
+    use crate::shell::{KeyboardMode, LayerInfo, Placement, ShellLayer};
 
     fn win(id: u64, app_id: &str, title: &str, focused: bool, mapped: bool) -> WindowInfo {
         WindowInfo {
@@ -90,6 +102,24 @@ mod tests {
             focused,
             suspended: false,
             placement: Placement::Maximized,
+            kind: WindowKind::Toplevel,
+            layer: None,
+        }
+    }
+
+    fn layer(id: u64, namespace: &str) -> WindowInfo {
+        WindowInfo {
+            kind: WindowKind::Layer,
+            layer: Some(LayerInfo {
+                namespace: namespace.into(),
+                layer: ShellLayer::Top,
+                keyboard: KeyboardMode::None,
+                exclusive_zone: 32,
+                anchor: vec!["top".into()],
+            }),
+            app_id: String::new(),
+            title: String::new(),
+            ..win(id, "", "", false, true)
         }
     }
 
@@ -112,6 +142,21 @@ mod tests {
         assert_eq!(pick(WindowRef::Any), Some(1));
         assert_eq!(pick(WindowRef::app_id("org.c")), None);
         assert_eq!(pick(WindowRef::id(WindowId(3))), Some(3));
+    }
+
+    #[test]
+    fn selects_layers_by_namespace() {
+        let windows = vec![win(1, "org.a", "Alpha", false, true), layer(2, "bar")];
+        let pick = |r: WindowRef| {
+            WindowMatcher::new(&r)
+                .unwrap()
+                .select(&windows)
+                .map(|w| w.id.0)
+        };
+        assert_eq!(pick(WindowRef::layer("bar")), Some(2));
+        assert_eq!(pick(WindowRef::app_id("bar")), Some(2));
+        assert_eq!(pick(WindowRef::layer("org.a")), None);
+        assert_eq!(pick(WindowRef::Lock), None);
     }
 
     #[test]

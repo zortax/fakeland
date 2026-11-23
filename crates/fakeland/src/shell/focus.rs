@@ -1,26 +1,29 @@
-//! Keyboard focus and activation. The focused window carries the activated state, sits on top of
-//! the space and has keyboard focus.
+//! Toplevel focus and activation. The focused toplevel carries the activated state and sits on
+//! top of the space. It has keyboard focus unless a lock or layer surface holds it.
 
 use fakeland_types::WindowId;
-use smithay::utils::SERIAL_COUNTER;
 
 use crate::server::State;
 
 impl State {
-    /// Focuses a window, or clears focus with `None`.
+    /// Focuses a toplevel, or clears toplevel focus with `None`. A toplevel takes keyboard focus
+    /// back from a layer surface that took it on demand.
     pub fn focus_window(&mut self, id: Option<WindowId>) {
+        if id.is_some() {
+            self.layers.focus = None;
+        }
+        self.set_window_focus(id);
+    }
+
+    /// Focuses a toplevel and leaves the focus of layer surfaces as it is.
+    pub fn set_window_focus(&mut self, id: Option<WindowId>) {
         let id = id.filter(|w| self.windows.get(*w).is_some());
         let old = self.windows.focus;
         self.windows.focus = id;
         if let Some(w) = id {
             self.windows.push_focus(w);
         }
-        let surface = id
-            .and_then(|w| self.windows.get(w))
-            .map(|r| r.toplevel.wl_surface().clone());
-        if let Some(keyboard) = self.seat.get_keyboard() {
-            keyboard.set_focus(self, surface, SERIAL_COUNTER.next_serial());
-        }
+        self.refresh_keyboard_focus();
         if let Some(rec) = id.and_then(|w| self.windows.get(w))
             && rec.mapped_at.is_some()
         {

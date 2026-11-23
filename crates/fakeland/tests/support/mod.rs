@@ -1,7 +1,10 @@
 //! Shared helpers of the integration tests: a lock that runs one session at a time, the output
-//! directory for screenshots, the reference client path and image checks.
+//! directory for screenshots, the reference and layer client paths, image checks, and the
+//! helpers of the shell tests.
 
 #![allow(dead_code)]
+
+pub mod shell;
 
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
@@ -37,6 +40,17 @@ pub fn testclient() -> String {
     assert!(
         path.exists(),
         "build the reference client first: cargo build -p fakeland-testclient"
+    );
+    path.to_string_lossy().into_owned()
+}
+
+/// Returns the path of the layer-shell and session-lock client.
+pub fn layerclient() -> String {
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/debug/fakeland-layerclient");
+    assert!(
+        path.exists(),
+        "build the layer client first: cargo build -p fakeland-layerclient"
     );
     path.to_string_lossy().into_owned()
 }

@@ -25,6 +25,8 @@ use smithay::wayland::presentation::PresentationState;
 use smithay::wayland::relative_pointer::RelativePointerManagerState;
 use smithay::wayland::selection::data_device::DataDeviceState;
 use smithay::wayland::selection::primary_selection::PrimarySelectionState;
+use smithay::wayland::session_lock::SessionLockManagerState;
+use smithay::wayland::shell::wlr_layer::WlrLayerShellState;
 use smithay::wayland::shell::xdg::XdgShellState;
 use smithay::wayland::shell::xdg::decoration::XdgDecorationState;
 use smithay::wayland::shm::ShmState;
@@ -36,7 +38,7 @@ use smithay::wayland::xdg_foreign::XdgForeignState;
 use smithay::wayland::xdg_system_bell::XdgSystemBellState;
 use smithay::wayland::xdg_toplevel_tag::XdgToplevelTagManager;
 
-use super::{Protocols, TearingControlState, create_text_input_global};
+use super::{GammaControlState, Protocols, TearingControlState, create_text_input_global};
 use crate::render::RenderBackend;
 use crate::server::State;
 
@@ -75,6 +77,8 @@ impl Protocols {
                 ],
             ),
             xdg_decoration: XdgDecorationState::new::<State>(dh),
+            layer_shell: WlrLayerShellState::new::<State>(dh),
+            session_lock: SessionLockManagerState::new::<State, _>(dh, |_client| true),
             shm: ShmState::new::<State>(dh, shm_formats),
             dmabuf,
             dmabuf_global,
@@ -94,6 +98,7 @@ impl Protocols {
             alpha_modifier: AlphaModifierState::new::<State>(dh),
             content_type: ContentTypeState::new::<State>(dh),
             tearing_control: TearingControlState::new(dh),
+            gamma_control: GammaControlState::new(dh),
             cursor_shape: CursorShapeManagerState::new::<State>(dh),
             relative_pointer: RelativePointerManagerState::new::<State>(dh),
             pointer_constraints: PointerConstraintsState::new::<State>(dh),

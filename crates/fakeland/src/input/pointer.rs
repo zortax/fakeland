@@ -158,11 +158,11 @@ impl State {
         self.flush_deferred_motion();
         let pointer = self.seat.get_pointer().ok_or(InjectError::NoPointer)?;
         let position = self.windows.cursor.position;
-        if pressed
-            && let Some(window) = self.window_under(position)
-            && self.windows.focus != Some(window)
-        {
-            self.focus_window(Some(window));
+        if pressed {
+            if self.input.held_buttons.is_empty() {
+                self.refocus_pointer();
+            }
+            self.focus_at(position);
         }
         let focus = pointer.current_focus();
         let (id, surface) = self.mark_input(focus.as_ref(), MarkKind::PointerButton);
@@ -187,6 +187,9 @@ impl State {
                 },
             },
         );
+        if pressed {
+            self.refresh_keyboard_focus();
+        }
         self.input.pointer_group.push(PendingSent {
             id,
             kind: InputKind::PointerButton,
@@ -241,6 +244,9 @@ impl State {
             if v || !h {
                 frame = frame.stop(Axis::Vertical);
             }
+        }
+        if self.input.held_buttons.is_empty() {
+            self.refocus_pointer();
         }
         let focus = pointer.current_focus();
         let (id, surface) = self.mark_input(focus.as_ref(), MarkKind::PointerAxis);

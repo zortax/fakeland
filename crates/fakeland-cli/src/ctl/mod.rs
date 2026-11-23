@@ -6,6 +6,7 @@ mod bench;
 mod exec;
 mod input;
 mod media;
+mod outputs;
 mod position;
 mod print;
 mod session;

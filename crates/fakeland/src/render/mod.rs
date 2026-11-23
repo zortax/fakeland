@@ -15,7 +15,7 @@ pub use backend::RenderBackend;
 pub use buffer::{ShmReader, read_buffer};
 pub use cursor::default_cursor;
 pub use device::{GlesDevice, find_render_node};
-pub use elements::{CursorScene, WindowScene, collect};
+pub use elements::{CursorScene, LockScene, Overlays, SceneSurface, WindowScene, collect};
 pub use error::RenderError;
 pub use readback::{Readback, copy_rows, create_target, into_image, map, render};
 pub use targets::CaptureTargets;

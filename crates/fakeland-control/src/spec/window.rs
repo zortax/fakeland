@@ -5,8 +5,9 @@ use fakeland_types::WindowId;
 
 use super::SpecError;
 
-/// Parses a window matcher: `focused`, `any`, a window id such as `3` or `id:3`, `app:APP_ID`
-/// or `title:REGEX`. Any other text matches the app id.
+/// Parses a window matcher: `focused`, `any`, `lock`, a window id such as `3` or `id:3`,
+/// `app:APP_ID`, `title:REGEX` or `layer:NAMESPACE`. Any other text matches the app id or the
+/// layer namespace.
 pub fn parse_window_ref(s: &str) -> Result<WindowRef, SpecError> {
     let s = s.trim();
     if s.is_empty() {
@@ -22,8 +23,10 @@ pub fn parse_window_ref(s: &str) -> Result<WindowRef, SpecError> {
         Some(("id", v)) => id(v)?,
         Some(("app" | "app_id" | "app-id", v)) => WindowRef::app_id(v),
         Some(("title", v)) => WindowRef::title_regex(v),
+        Some(("layer" | "namespace", v)) => WindowRef::layer(v),
         _ if s == "focused" => WindowRef::Focused,
         _ if s == "any" => WindowRef::Any,
+        _ if s == "lock" => WindowRef::Lock,
         _ if s
             .trim_start_matches("window#")
             .chars()
@@ -43,6 +46,11 @@ mod tests {
     fn parses_matchers() {
         assert_eq!(parse_window_ref("focused").unwrap(), WindowRef::Focused);
         assert_eq!(parse_window_ref("any").unwrap(), WindowRef::Any);
+        assert_eq!(parse_window_ref("lock").unwrap(), WindowRef::Lock);
+        assert_eq!(
+            parse_window_ref("layer:carapace-bar").unwrap(),
+            WindowRef::layer("carapace-bar")
+        );
         assert_eq!(parse_window_ref("3").unwrap(), WindowRef::id(WindowId(3)));
         assert_eq!(
             parse_window_ref("id:4").unwrap(),

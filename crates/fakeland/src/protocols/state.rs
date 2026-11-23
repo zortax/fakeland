@@ -21,6 +21,8 @@ use smithay::wayland::presentation::PresentationState;
 use smithay::wayland::relative_pointer::RelativePointerManagerState;
 use smithay::wayland::selection::data_device::DataDeviceState;
 use smithay::wayland::selection::primary_selection::PrimarySelectionState;
+use smithay::wayland::session_lock::SessionLockManagerState;
+use smithay::wayland::shell::wlr_layer::WlrLayerShellState;
 use smithay::wayland::shell::xdg::XdgShellState;
 use smithay::wayland::shell::xdg::decoration::XdgDecorationState;
 use smithay::wayland::shm::ShmState;
@@ -32,7 +34,7 @@ use smithay::wayland::xdg_foreign::XdgForeignState;
 use smithay::wayland::xdg_system_bell::XdgSystemBellState;
 use smithay::wayland::xdg_toplevel_tag::XdgToplevelTagManager;
 
-use super::TearingControlState;
+use super::{GammaControlState, TearingControlState};
 use crate::server::State;
 
 /// Every protocol state of the compositor.
@@ -45,6 +47,8 @@ pub struct Protocols {
     pub compositor: CompositorState,
     pub xdg_shell: XdgShellState,
     pub xdg_decoration: XdgDecorationState,
+    pub layer_shell: WlrLayerShellState,
+    pub session_lock: SessionLockManagerState,
     pub shm: ShmState,
     pub dmabuf: DmabufState,
     pub dmabuf_global: Option<DmabufGlobal>,
@@ -64,6 +68,7 @@ pub struct Protocols {
     pub alpha_modifier: AlphaModifierState,
     pub content_type: ContentTypeState,
     pub tearing_control: TearingControlState,
+    pub gamma_control: GammaControlState,
     pub cursor_shape: CursorShapeManagerState,
     pub relative_pointer: RelativePointerManagerState,
     pub pointer_constraints: PointerConstraintsState,

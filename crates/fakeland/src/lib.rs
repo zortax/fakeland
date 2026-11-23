@@ -32,6 +32,8 @@ mod framecap;
 mod frames;
 mod input;
 mod launch;
+mod layers;
+mod lock;
 mod marks;
 mod outputs;
 mod probes;
@@ -76,7 +78,10 @@ pub use server::ClientInfo;
 pub use session::{
     Fakeland, FakelandBuilder, RunHandle, Session, SessionError, StartError, WindowOp,
 };
-pub use shell::{MatchError, Placement, WindowInfo};
+pub use shell::{
+    KeyboardMode, LayerInfo, MatchError, Placement, ShellLayer, WindowInfo, WindowKind,
+    WindowOpError,
+};
 pub use util::block_on;
 pub use video::{
     FrameRate, RecordError, RecordSpec, RecordTarget, Recording, RecordingId, RecordingInfo,

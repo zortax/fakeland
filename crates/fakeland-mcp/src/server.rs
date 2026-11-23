@@ -35,6 +35,7 @@ impl FakelandMcp {
         Self {
             state,
             tool_router: Self::session_router()
+                + Self::outputs_router()
                 + Self::screen_router()
                 + Self::input_router()
                 + Self::measure_router()

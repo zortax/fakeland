@@ -9,6 +9,7 @@ use smithay::desktop::Window;
 use smithay::utils::Point;
 
 use super::{CaptureError, CaptureOptions, Screenshot};
+use crate::render::{LockScene, Overlays, SceneSurface};
 use crate::server::State;
 
 /// What the region shows.
@@ -18,6 +19,8 @@ pub(super) enum Scene {
     Space,
     /// One window alone, with its geometry origin.
     Window(Window, Point<i32, smithay::utils::Logical>),
+    /// One layer or lock surface alone.
+    Shell(Overlays),
 }
 
 /// A resolved capture.
@@ -142,7 +145,9 @@ impl State {
     }
 
     fn plan_window(&self, id: WindowId, rect: Option<Rect<Logical>>) -> Result<Plan, CaptureError> {
-        let rec = self.windows.get(id).ok_or(CaptureError::NoWindow)?;
+        let Some(rec) = self.windows.get(id) else {
+            return self.plan_shell_surface(id, rect);
+        };
         if rec.mapped_at.is_none() {
             return Err(CaptureError::NoWindow);
         }
@@ -168,6 +173,59 @@ impl State {
             scale,
             scene: Scene::Window(rec.window.clone(), geo.loc),
             output: Some(rec.output),
+            window: Some(id),
+            what: format!("window {}", id.0),
+        })
+    }
+
+    /// Plans the capture of a layer or lock surface alone.
+    fn plan_shell_surface(
+        &self,
+        id: WindowId,
+        rect: Option<Rect<Logical>>,
+    ) -> Result<Plan, CaptureError> {
+        let info = self
+            .info_of(id)
+            .filter(|i| i.is_mapped())
+            .ok_or(CaptureError::NoWindow)?;
+        let (root, origin) = self.shell_root(id).ok_or(CaptureError::NoWindow)?;
+        let full = info.geometry;
+        let region = match rect {
+            Some(r) => r
+                .translate(full.x, full.y)
+                .intersection(full)
+                .ok_or(CaptureError::Empty)?,
+            None => full,
+        };
+        let overlays = match self.layers.get(id) {
+            Some(rec) => Overlays {
+                above: vec![SceneSurface {
+                    surface: rec.layer.clone(),
+                    origin,
+                }],
+                ..Overlays::default()
+            },
+            None => Overlays {
+                lock: Some(LockScene {
+                    surfaces: vec![SceneSurface {
+                        surface: root,
+                        origin,
+                    }],
+                    backdrop: self.lock.backdrop.clone(),
+                }),
+                ..Overlays::default()
+            },
+        };
+        let scale = self
+            .outputs
+            .get(info.output)
+            .map(|o| o.config.scale)
+            .unwrap_or(1.0);
+        Ok(Plan {
+            region,
+            scale,
+            scene: Scene::Shell(overlays),
+            output: Some(info.output),
             window: Some(id),
             what: format!("window {}", id.0),
         })

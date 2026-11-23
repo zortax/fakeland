@@ -61,6 +61,7 @@ pub async fn dispatch(c: &Controller, method: &str, params: Value) -> Result<Val
         WaitFrames::NAME => run::<WaitFrames, _>(params, |p| c.wait_frames(p)).await,
         WaitFor::NAME => run::<WaitFor, _>(params, |p| c.wait(p)).await,
         WindowOperation::NAME => run::<WindowOperation, _>(params, |p| c.window_op(p)).await,
+        ForceUnlock::NAME => run::<ForceUnlock, _>(params, |p| c.force_unlock(p)).await,
         Launch::NAME => run::<Launch, _>(params, |p| c.launch(p)).await,
         Apps::NAME => run::<Apps, _>(params, |p| async move { Ok(c.apps_list(p)) }).await,
         Kill::NAME => run::<Kill, _>(params, |p| c.kill(p)).await,
@@ -70,6 +71,10 @@ pub async fn dispatch(c: &Controller, method: &str, params: Value) -> Result<Val
         SetOutput::NAME => run::<SetOutput, _>(params, |p| c.set_output(p)).await,
         AddOutput::NAME => run::<AddOutput, _>(params, |p| c.add_output(p)).await,
         RemoveOutput::NAME => run::<RemoveOutput, _>(params, |p| c.remove_output(p)).await,
+        ReplugOutput::NAME => run::<ReplugOutput, _>(params, |p| c.replug_output(p)).await,
+        UnpluggedOutputs::NAME => {
+            run::<UnpluggedOutputs, _>(params, |p| c.unplugged_outputs(p)).await
+        }
         Screenshot::NAME => run::<Screenshot, _>(params, |p| c.screenshot(p)).await,
         Inject::NAME => run::<Inject, _>(params, |p| c.inject(p)).await,
         Act::NAME => run::<Act, _>(params, |p| c.act(p)).await,

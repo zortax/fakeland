@@ -13,7 +13,7 @@ pub enum WindowRef {
         /// The window id.
         id: WindowId,
     },
-    /// The first window with this app id.
+    /// The first window with this app id, or the first layer surface with this namespace.
     AppId {
         /// The `xdg_toplevel` app id.
         app_id: String,
@@ -26,8 +26,15 @@ pub enum WindowRef {
     /// The window with keyboard focus.
     #[default]
     Focused,
-    /// Any mapped window.
+    /// Any mapped window, layer and lock surfaces included.
     Any,
+    /// The first layer surface with this namespace.
+    Layer {
+        /// The `zwlr_layer_surface_v1` namespace.
+        namespace: String,
+    },
+    /// The first lock surface of the session lock.
+    Lock,
 }
 
 impl WindowRef {
@@ -40,6 +47,13 @@ impl WindowRef {
     pub fn app_id(app_id: impl Into<String>) -> Self {
         Self::AppId {
             app_id: app_id.into(),
+        }
+    }
+
+    /// Matches a layer surface namespace.
+    pub fn layer(namespace: impl Into<String>) -> Self {
+        Self::Layer {
+            namespace: namespace.into(),
         }
     }
 

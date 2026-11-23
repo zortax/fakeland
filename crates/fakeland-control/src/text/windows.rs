@@ -2,9 +2,9 @@
 
 use std::fmt::Write;
 
-use fakeland::{OutputState, WindowInfo};
+use fakeland::{OutputConfig, OutputState, WindowInfo, WindowKind};
 
-/// Renders one line per window: id, app id, title, geometry, output and state.
+/// Renders one line per window: id, app id and title or layer state, geometry, output and state.
 pub fn windows_text(windows: &[WindowInfo]) -> String {
     if windows.is_empty() {
         return "no windows\n".to_owned();
@@ -23,19 +23,38 @@ pub fn windows_text(windows: &[WindowInfo]) -> String {
             flags.push("suspended");
         }
         let pid = w.pid.map_or_else(|| "-".to_owned(), |p| p.0.to_string());
+        let role = match (w.kind, &w.layer) {
+            (WindowKind::Layer, Some(l)) => format!(
+                "layer namespace={:?} layer={:?} keyboard={:?} exclusive_zone={} anchor={}",
+                l.namespace,
+                l.layer,
+                l.keyboard,
+                l.exclusive_zone,
+                if l.anchor.is_empty() {
+                    "none".to_owned()
+                } else {
+                    l.anchor.join("+")
+                }
+            ),
+            (WindowKind::Lock, _) => "lock".to_owned(),
+            _ => format!("app_id={:?} title={:?}", w.app_id, w.title),
+        };
+        let placement = match w.kind {
+            WindowKind::Toplevel => format!(" {:?}", w.placement),
+            _ => String::new(),
+        };
         let _ = writeln!(
             out,
-            "{} app_id={:?} title={:?} {}x{}+{}+{} output={} pid={} {:?}{}",
+            "{} {} {}x{}+{}+{} output={} pid={}{}{}",
             w.id,
-            w.app_id,
-            w.title,
+            role,
             g.w,
             g.h,
             g.x,
             g.y,
             w.output,
             pid,
-            w.placement,
+            placement,
             if flags.is_empty() {
                 String::new()
             } else {
@@ -64,6 +83,22 @@ pub fn outputs_text(outputs: &[OutputState]) -> String {
             o.position.x,
             o.position.y,
             if o.enabled { "" } else { " (off)" }
+        );
+    }
+    out
+}
+
+/// Renders one line per unplugged output: name, mode, scale and position.
+pub fn unplugged_text(outputs: &[OutputConfig]) -> String {
+    let mut out = String::new();
+    for o in outputs {
+        let at = o
+            .position
+            .map_or_else(String::new, |p| format!(" at {},{}", p.x, p.y));
+        let _ = writeln!(
+            out,
+            "unplugged {} {}x{}@{:.3}Hz scale {}{at}",
+            o.name, o.mode.width, o.mode.height, o.mode.refresh.0, o.scale,
         );
     }
     out

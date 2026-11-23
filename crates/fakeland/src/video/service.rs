@@ -192,7 +192,7 @@ impl State {
     pub(super) fn source_output(&self, source: Source) -> Option<fakeland_types::OutputId> {
         match source {
             Source::Output(o) => self.outputs.get(o).map(|_| o),
-            Source::Window(w) => self.windows.get(w).map(|r| r.output),
+            Source::Window(w) => self.window_output(w),
         }
     }
 }

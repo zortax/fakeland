@@ -419,6 +419,14 @@ pub enum Event {
         /// The energy since the counter start in microjoules.
         microjoules_total: u64,
     },
+    /// A client sets the gamma ramps of an output, or the output returns to its own ramps.
+    Gamma {
+        /// The output.
+        output: OutputId,
+        /// The last entry of the red, green and blue ramps. `None` when the output shows its own
+        /// ramps.
+        top: Option<[u16; 3]>,
+    },
     /// An event of a newer format that this build does not know.
     #[serde(other)]
     Unknown,

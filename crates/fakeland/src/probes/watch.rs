@@ -75,8 +75,8 @@ pub(super) fn in_target(state: &State, run: &Shared, surface: SurfaceId) -> bool
         Target::Window(w) => state.window_of_surface_id(surface) == Some(w),
         Target::Output(o) => state
             .window_of_surface_id(surface)
-            .and_then(|w| state.windows.get(w))
-            .is_some_and(|w| w.output == o),
+            .and_then(|w| state.window_output(w))
+            .is_some_and(|w| w == o),
     }
 }
 

@@ -9,7 +9,8 @@ use fakeland_types::OutputId;
 /// pointer.
 #[derive(Debug, Clone, Default, Args)]
 pub struct Frame {
-    /// Coordinates are relative to this window: focused, any, ID, app:APP_ID or title:REGEX.
+    /// Coordinates are relative to this window: focused, any, ID, app:APP_ID,
+    /// title:REGEX, layer:NAMESPACE or lock.
     #[arg(long, value_name = "WINDOW")]
     pub window: Option<String>,
     /// Coordinates are on this output id.

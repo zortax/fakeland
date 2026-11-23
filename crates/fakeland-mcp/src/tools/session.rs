@@ -1,25 +1,25 @@
-//! Session, app, window, output and clipboard tools.
+//! Session, app, window and clipboard tools.
 
 use std::path::PathBuf;
 
-use anyhow::{Context, Result, bail};
-use fakeland::{LaunchSpec, OutputChange, WindowOp};
+use anyhow::{Context, Result};
+use fakeland::{LaunchSpec, WindowOp};
 use fakeland_control::Controller;
 use fakeland_control::methods::{
     ClipboardGetParams, ClipboardSetParams as CtlClipboardSet, KillParams, KillSignal,
     LaunchParams as CtlLaunch, LogsParams as CtlLogs, NoParams, RestartParams,
 };
 use fakeland_control::ops::describe_exit;
-use fakeland_control::spec::{parse_output, parse_timing, parse_window_ref};
+use fakeland_control::spec::parse_window_ref;
 use fakeland_control::text::outputs_text;
-use fakeland_types::{Dur, OutputId, ProcessId};
+use fakeland_types::{Dur, ProcessId};
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::{tool, tool_router};
 
 use super::common::{limit, ms, window_line};
 use crate::params::{
     ClipboardSetParams, KillAppParams, LaunchParams, LogsParams, NoArgs, RestartAppParams,
-    SessionStartParams, SetOutputParams, WindowParams,
+    SessionStartParams, WindowParams,
 };
 use crate::reply::{ToolResult, done, done_json, finish, text};
 use crate::server::FakelandMcp;
@@ -65,46 +65,6 @@ impl FakelandMcp {
         }
         out.push_str(&self.windows_line(c).await);
         Ok(out)
-    }
-
-    async fn output_changes(
-        &self,
-        c: &Controller,
-        p: &SetOutputParams,
-    ) -> Result<Vec<OutputChange>> {
-        let mut changes = Vec::new();
-        let mut refresh = None;
-        if let Some(m) = &p.mode {
-            let (_, mode) = parse_output(m)?;
-            refresh = Some(mode.refresh);
-            changes.push(OutputChange::Mode(mode));
-        }
-        if let Some(s) = p.scale {
-            changes.push(OutputChange::Scale { scale: s });
-        }
-        if let Some(t) = &p.timing {
-            let refresh = match refresh {
-                Some(r) => r,
-                None => {
-                    let outputs = bounded(CALL_SLACK, c.session().outputs()).await??;
-                    outputs
-                        .iter()
-                        .find(|o| p.output.is_none_or(|id| o.id == OutputId(id)))
-                        .map(|o| o.mode.refresh)
-                        .context("no such output")?
-                }
-            };
-            changes.push(OutputChange::Timing(parse_timing(t, refresh)?));
-        }
-        match p.enabled {
-            Some(true) => changes.push(OutputChange::Enable),
-            Some(false) => changes.push(OutputChange::Disable),
-            None => {}
-        }
-        if changes.is_empty() {
-            bail!("give at least one of mode, scale, timing or enabled");
-        }
-        Ok(changes)
     }
 }
 
@@ -165,7 +125,7 @@ impl FakelandMcp {
 
     /// Lists windows, outputs and apps.
     #[tool(
-        description = "List the windows (id, app_id, title, logical geometry, focus), the outputs and the launched apps."
+        description = "List the windows (id, app_id, title, logical geometry, focus), the layer-shell surfaces (namespace, layer, keyboard mode, exclusive zone, anchors) and lock surfaces, the outputs and the launched apps."
     )]
     async fn list_windows(&self, Parameters(_): Parameters<NoArgs>) -> ToolResult {
         finish(
@@ -181,7 +141,7 @@ impl FakelandMcp {
 
     /// Focuses a window.
     #[tool(
-        description = "Give a window keyboard focus and raise it. window: focused, any, an id such as 3, app:APP_ID or title:REGEX."
+        description = "Give a window keyboard focus and raise it. window: focused, any, an id such as 3, app:APP_ID, title:REGEX, layer:NAMESPACE or lock. A layer surface takes focus only with keyboard interactivity."
     )]
     async fn focus_window(&self, Parameters(p): Parameters<WindowParams>) -> ToolResult {
         finish(
@@ -195,6 +155,24 @@ impl FakelandMcp {
                 .await??;
                 let w = c.resolve_window(matcher).await?;
                 done(format!("Focused {}", window_line(&w)))
+            }
+            .await,
+        )
+    }
+
+    /// Unlocks the session.
+    #[tool(
+        description = "Unlock a session that an ext-session-lock client locked, without that client. Use it to recover when the lock client hangs or died. The lock client still sees the session locked."
+    )]
+    async fn force_unlock(&self, Parameters(_): Parameters<NoArgs>) -> ToolResult {
+        finish(
+            async {
+                let c = self.ctl().await?;
+                if bounded(CALL_SLACK, c.force_unlock(NoParams {})).await?? {
+                    done("The session is unlocked.".to_owned())
+                } else {
+                    done("The session was not locked.".to_owned())
+                }
             }
             .await,
         )
@@ -271,25 +249,6 @@ impl FakelandMcp {
                     format!("\nFirst window: {}", window_line(w))
                 });
                 done(format!("Restarted as {}{window}", app_line(&info)))
-            }
-            .await,
-        )
-    }
-
-    /// Changes an output.
-    #[tool(
-        description = "Change an output: mode like \"2560x1440@144\", scale like 1.5, timing (fixed, vrr:48-144, unthrottled, manual), or enabled. Windows follow the new size."
-    )]
-    async fn set_output(&self, Parameters(p): Parameters<SetOutputParams>) -> ToolResult {
-        finish(
-            async {
-                let c = self.ctl().await?;
-                let output = p.output.map(OutputId);
-                for change in self.output_changes(&c, &p).await? {
-                    bounded(CALL_SLACK, c.session().set_output(output, change)).await??;
-                }
-                let outputs = bounded(CALL_SLACK, c.session().outputs()).await??;
-                done(format!("Outputs:\n{}", outputs_text(&outputs)))
             }
             .await,
         )

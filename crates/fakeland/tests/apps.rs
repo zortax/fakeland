@@ -46,6 +46,7 @@ fn wayland_info_sees_a_desktop_global_list() {
         "wp_alpha_modifier_v1",
         "wp_content_type_manager_v1",
         "wp_tearing_control_manager_v1",
+        "zwlr_gamma_control_manager_v1",
         "wp_cursor_shape_manager_v1",
         "zwp_relative_pointer_manager_v1",
         "zwp_pointer_constraints_v1",

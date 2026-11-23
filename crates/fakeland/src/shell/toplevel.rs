@@ -25,9 +25,7 @@ impl State {
         let output = self.output_for_new_window(pid);
         let index = self.windows.next_index(output);
         let out_rect = self
-            .outputs
-            .get(output)
-            .map(|o| o.logical_rect())
+            .work_area(output)
             .unwrap_or(Rect::new(0, 0, 1920, 1080));
         let layout = initial_layout(self.config.window_policy, out_rect, index);
         let floating = match layout.placement {
@@ -58,7 +56,7 @@ impl State {
 
     /// Returns the output of a new window: the launch output of its process, or the primary
     /// output.
-    fn output_for_new_window(&self, pid: Option<ProcessId>) -> OutputId {
+    pub fn output_for_new_window(&self, pid: Option<ProcessId>) -> OutputId {
         pid.and_then(|p| self.processes.output_for(p))
             .and_then(|o| self.outputs.resolve(Some(o)))
             .or_else(|| self.outputs.primary())
@@ -152,7 +150,8 @@ impl State {
         self.space_dirty = true;
     }
 
-    /// Returns the window of any surface in a window tree: subsurfaces and popups included.
+    /// Returns the window, layer surface or lock surface of any surface in its tree: subsurfaces
+    /// and popups included.
     pub fn window_of_surface(
         &self,
         surface: &smithay::reexports::wayland_server::protocol::wl_surface::WlSurface,
@@ -164,11 +163,12 @@ impl State {
         while let Some(parent) = smithay::wayland::compositor::get_parent(&root) {
             root = parent;
         }
-        if let Some(id) = self
-            .surfaces
-            .id_of(&root)
-            .and_then(|s| self.windows.by_surface(s))
-        {
+        if let Some(id) = self.surfaces.id_of(&root).and_then(|s| {
+            self.windows
+                .by_surface(s)
+                .or_else(|| self.layers.by_surface(s))
+                .or_else(|| self.lock.by_surface(s))
+        }) {
             return Some(id);
         }
         let popup = self.popups.find_popup(&root)?;

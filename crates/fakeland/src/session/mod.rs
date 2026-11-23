@@ -10,6 +10,7 @@ mod frames;
 mod handle;
 mod inner;
 mod input;
+mod lock;
 mod outputs;
 mod probes;
 mod reactor;

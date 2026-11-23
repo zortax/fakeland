@@ -1,4 +1,4 @@
-//! Parameters of the session, app, window, output and clipboard tools.
+//! Parameters of the session, app, window and clipboard tools.
 
 use std::collections::BTreeMap;
 
@@ -46,7 +46,8 @@ pub struct LaunchParams {
 /// A window.
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct WindowParams {
-    /// The window: `focused`, `any`, a window id such as `3`, `app:APP_ID` or `title:REGEX`.
+    /// The window: `focused`, `any`, a window id such as `3`, `app:APP_ID`, `title:REGEX`,
+    /// `layer:NAMESPACE` or `lock`.
     pub window: String,
 }
 
@@ -81,26 +82,6 @@ pub struct RestartAppParams {
     /// Wait this long for the first window, in milliseconds.
     #[serde(default = "defaults::wait_ms")]
     pub wait_window_ms: u64,
-}
-
-/// Output changes. Give at least one.
-#[derive(Debug, Deserialize, JsonSchema)]
-pub struct SetOutputParams {
-    /// The output id. The default is the primary output.
-    #[serde(default)]
-    pub output: Option<u32>,
-    /// A mode as `WIDTHxHEIGHT[@HZ]`, such as `2560x1440@144`.
-    #[serde(default)]
-    pub mode: Option<String>,
-    /// A scale, such as 1.5.
-    #[serde(default)]
-    pub scale: Option<f64>,
-    /// A timing model: `fixed`, `vrr:MIN-MAX`, `unthrottled`, `manual` or `manual:HZ`.
-    #[serde(default)]
-    pub timing: Option<String>,
-    /// Power the output on or off.
-    #[serde(default)]
-    pub enabled: Option<bool>,
 }
 
 /// Clipboard text.

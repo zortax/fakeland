@@ -13,7 +13,7 @@ use smithay::reexports::wayland_server::protocol::wl_buffer::WlBuffer;
 use smithay::utils::{Logical as SLogical, Point};
 
 use super::geometry::BufferPlacement;
-use super::hit::{detect, take_presentation};
+use super::hit::{detect, placed, take_presentation};
 use super::queue::{Candidate, ReadbackQueue, drain_through, enqueue};
 use super::readback::committed_placement;
 use super::run::{CommitLog, CommitTimes, Shared, Target};
@@ -58,6 +58,9 @@ pub(super) struct Watch {
     pub queue: ReadbackQueue,
     /// Commits from before the input whose fences are pending. Their buffers become baselines.
     pub early: HashSet<CommitId>,
+    /// Candidates of surfaces that had no place on an output at their readback. They go back to
+    /// the queue when their surface maps.
+    pub unplaced: Vec<Candidate>,
 }
 
 impl Watch {
@@ -76,6 +79,7 @@ impl Watch {
             follow: false,
             queue: ReadbackQueue::default(),
             early: HashSet::new(),
+            unplaced: Vec::new(),
         }
     }
 
@@ -279,6 +283,7 @@ pub(super) fn on_record(state: &mut State, run: &Shared, record: &Record) -> Ste
             }
             Step::Continue
         }
+        Event::WindowMapped { surface, .. } => placed(state, run, *surface),
         Event::Discarded { commit, .. } => {
             {
                 let mut r = run.borrow_mut();

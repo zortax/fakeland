@@ -10,8 +10,8 @@ pub struct RecordStartParams {
     /// path without extension becomes a directory of PNG frames. A relative path is relative to
     /// the working directory of the server.
     pub path: String,
-    /// Record this window alone: `focused`, `any`, an id, `app:APP_ID` or `title:REGEX`. The
-    /// default records the output.
+    /// Record this window alone: `focused`, `any`, an id, `app:APP_ID`, `title:REGEX` or
+    /// `layer:NAMESPACE`. The default records the output.
     #[serde(default)]
     pub window: Option<String>,
     /// The output id. The default is the primary output.

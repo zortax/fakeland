@@ -1,4 +1,5 @@
 //! Window operations from the session: focus, size, placement, suspension, output and close.
+//! Layer surfaces take focus and close; lock surfaces take focus.
 
 use fakeland_scenario::{WindowAction, WindowRef};
 use fakeland_types::{Logical, OutputId, Rect, Size, WindowId};
@@ -75,19 +76,28 @@ pub enum WindowOpError {
     /// The size is not positive.
     #[error("window sizes must be positive")]
     Size,
+    /// The operation needs a toplevel, and the window is a layer or lock surface.
+    #[error("window {0} is no toplevel")]
+    NotToplevel(WindowId),
+    /// The window is a layer surface without keyboard interactivity.
+    #[error("window {0} takes no keyboard focus")]
+    NoKeyboardFocus(WindowId),
 }
 
 impl State {
     /// Runs one window operation.
     pub fn window_op(&mut self, id: WindowId, op: WindowOp) -> Result<(), WindowOpError> {
+        if self.windows.get(id).is_none() {
+            return self.shell_surface_op(id, op);
+        }
         let rec = self.windows.get(id).ok_or(WindowOpError::NoWindow(id))?;
         let current = self
-            .outputs
-            .get(rec.output)
-            .map(|o| placement_rect(rec.placement, o.logical_rect(), rec.floating))
+            .placement_area(rec.output, rec.placement)
+            .map(|area| placement_rect(rec.placement, area, rec.floating))
             .unwrap_or(rec.floating);
         match op {
             WindowOp::Focus => {
+                self.end_popup_grabs();
                 self.focus_window(Some(id));
                 return Ok(());
             }
@@ -138,6 +148,38 @@ impl State {
             WindowOp::Focus | WindowOp::Close | WindowOp::MoveToOutput { .. } => {}
         }
         self.relayout_window(id);
+        Ok(())
+    }
+
+    /// Runs an operation on a layer or lock surface: focus, and close of a layer surface.
+    fn shell_surface_op(&mut self, id: WindowId, op: WindowOp) -> Result<(), WindowOpError> {
+        let is_layer = self.layers.get(id).is_some();
+        if !is_layer && self.lock.get(id).is_none() {
+            return Err(WindowOpError::NoWindow(id));
+        }
+        match op {
+            WindowOp::Focus if is_layer => {
+                let takes_focus = self
+                    .layers
+                    .get(id)
+                    .is_some_and(|r| r.layer.can_receive_keyboard_focus());
+                if !takes_focus {
+                    return Err(WindowOpError::NoKeyboardFocus(id));
+                }
+                self.end_popup_grabs();
+                self.focus_layer(id);
+            }
+            WindowOp::Focus => {
+                self.lock.focus = Some(id);
+                self.refresh_keyboard_focus();
+            }
+            WindowOp::Close if is_layer => {
+                if let Some(rec) = self.layers.get(id) {
+                    rec.layer.layer_surface().send_close();
+                }
+            }
+            _ => return Err(WindowOpError::NotToplevel(id)),
+        }
         Ok(())
     }
 }
